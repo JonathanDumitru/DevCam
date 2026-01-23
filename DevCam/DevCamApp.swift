@@ -26,6 +26,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var clipExporter: ClipExporter!
     private var keyboardShortcutHandler: KeyboardShortcutHandler!
     private var menuBarPopover: NSPopover?
+    private var settings: AppSettings!
+    private var preferencesWindow: NSWindow?
 
     var isTestMode: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -79,9 +81,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 recordingManager: recordingManager,
                 clipExporter: clipExporter,
                 onPreferences: { [weak self] in
-                    // TODO: Show preferences window
                     self?.menuBarPopover?.close()
-                    NSLog("DevCam: Show preferences")
+                    self?.showPreferences()
                 },
                 onQuit: {
                     NSApplication.shared.terminate(nil)
@@ -132,6 +133,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupManagers() {
+        settings = AppSettings()
         bufferManager = BufferManager()
         recordingManager = RecordingManager(
             bufferManager: bufferManager,
@@ -139,9 +141,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         clipExporter = ClipExporter(
             bufferManager: bufferManager,
-            saveLocation: nil, // Uses default ~/Movies/DevCam/
-            showNotifications: true
+            saveLocation: settings.saveLocation,
+            showNotifications: settings.showNotifications
         )
         NSLog("DevCam: Managers initialized")
+    }
+
+    private func showPreferences() {
+        // Create window if needed
+        if preferencesWindow == nil {
+            let prefsView = PreferencesWindow(
+                settings: settings,
+                permissionManager: permissionManager,
+                clipExporter: clipExporter
+            )
+
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+
+            window.title = "DevCam Preferences"
+            window.center()
+            window.contentView = NSHostingView(rootView: prefsView)
+            window.isReleasedWhenClosed = false
+
+            preferencesWindow = window
+        }
+
+        // Show window
+        preferencesWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
