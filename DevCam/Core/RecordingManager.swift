@@ -7,9 +7,12 @@
 //
 
 import Foundation
+import AppKit
+import CoreGraphics
 import ScreenCaptureKit
 import AVFoundation
 import Combine
+import OSLog
 
 enum RecordingError: Error {
     case permissionDenied
@@ -127,7 +130,7 @@ class RecordingManager: NSObject, ObservableObject {
             do {
                 try await stream.stopCapture()
             } catch {
-                print("Error stopping stream: \(error)")
+                DevCamLogger.recording.error("Error stopping stream: \(String(describing: error), privacy: .public)")
             }
         }
 
@@ -148,7 +151,7 @@ class RecordingManager: NSObject, ObservableObject {
             do {
                 try await stream.stopCapture()
             } catch {
-                print("Error pausing stream: \(error)")
+                DevCamLogger.recording.error("Error pausing stream: \(String(describing: error), privacy: .public)")
             }
         }
 
@@ -238,7 +241,7 @@ class RecordingManager: NSObject, ObservableObject {
     private func startNewSegment() async throws {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = "segment_\(timestamp).mp4"
-        let segmentURL = await bufferManager.getBufferDirectory().appendingPathComponent(filename)
+        let segmentURL = bufferManager.getBufferDirectory().appendingPathComponent(filename)
 
         guard let writer = try? AVAssetWriter(outputURL: segmentURL, fileType: .mp4) else {
             throw RecordingError.writerSetupFailed
@@ -314,18 +317,11 @@ class RecordingManager: NSObject, ObservableObject {
         // Finish writing
         await writer.finishWriting()
 
-        // Add to buffer manager
-        do {
-            await bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: duration)
+        bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: duration)
 
-            // Update published buffer duration
-            let totalDuration = await bufferManager.getCurrentBufferDuration()
-            self.bufferDuration = totalDuration
-
-        } catch {
-            print("Error adding segment to buffer: \(error)")
-            recordingError = RecordingError.segmentFinalizationFailed
-        }
+        // Update published buffer duration
+        let totalDuration = bufferManager.getCurrentBufferDuration()
+        self.bufferDuration = totalDuration
 
         // Clear current segment
         currentWriter = nil
@@ -351,7 +347,7 @@ class RecordingManager: NSObject, ObservableObject {
         do {
             try await startNewSegment()
         } catch {
-            print("Error rotating segment: \(error)")
+            DevCamLogger.recording.error("Error rotating segment: \(String(describing: error), privacy: .public)")
             recordingError = error
 
             // Stop recording after multiple failures
@@ -404,17 +400,17 @@ class RecordingManager: NSObject, ObservableObject {
     private func createTestSegment() async throws {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = "segment_\(timestamp).mp4"
-        let segmentURL = await bufferManager.getBufferDirectory().appendingPathComponent(filename)
+        let segmentURL = bufferManager.getBufferDirectory().appendingPathComponent(filename)
         let startTime = Date()
 
         // Create a dummy MP4 file (minimal valid MP4)
         try "TEST_VIDEO_CONTENT".write(to: segmentURL, atomically: true, encoding: .utf8)
 
         // Add to buffer manager
-        await bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: 60.0)
+        bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: 60.0)
 
         // Update published buffer duration
-        let totalDuration = await bufferManager.getCurrentBufferDuration()
+        let totalDuration = bufferManager.getCurrentBufferDuration()
         self.bufferDuration = totalDuration
     }
 }
@@ -424,7 +420,7 @@ class RecordingManager: NSObject, ObservableObject {
 extension RecordingManager: SCStreamDelegate {
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
-            print("Stream stopped with error: \(error)")
+            DevCamLogger.recording.error("Stream stopped with error: \(String(describing: error), privacy: .public)")
             self.recordingError = error
 
             // Attempt retry with exponential backoff

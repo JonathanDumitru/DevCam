@@ -1,6 +1,8 @@
 import Foundation
+import OSLog
 
-actor BufferManager {
+@MainActor
+class BufferManager {
     private var segments: [SegmentInfo] = []
     private let bufferDirectory: URL
     private let maxSegments = 15 // 15 minutes at 1 minute per segment

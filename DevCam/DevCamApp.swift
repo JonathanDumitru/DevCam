@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import OSLog
 
 @main
 struct DevCamApp: App {
@@ -34,14 +35,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSLog("DevCam: Application launching...")
+        DevCamLogger.app.info("Application launching")
 
         // Initialize managers (works in both normal and test mode)
         setupManagers()
 
         // Skip UI setup in test environment
         if isTestMode {
-            NSLog("DevCam: Running in test mode, skipping UI setup")
+            DevCamLogger.app.info("Running in test mode, skipping UI setup")
             return
         }
 
@@ -60,9 +61,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             do {
                 try await recordingManager.startRecording()
-                NSLog("DevCam: Recording started successfully")
+                DevCamLogger.recording.info("Recording started successfully")
             } catch {
-                NSLog("DevCam: Failed to start recording: \(error)")
+                DevCamLogger.recording.error("Failed to start recording: \(String(describing: error), privacy: .public)")
                 // Error will be set internally by RecordingManager
             }
         }
@@ -76,9 +77,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "DevCam")
             button.action = #selector(statusItemClicked)
             button.target = self
-            NSLog("DevCam: Status item created")
+            DevCamLogger.app.info("Status item created")
         } else {
-            NSLog("DevCam: ERROR - Failed to get status item button!")
+            DevCamLogger.app.error("Failed to get status item button")
         }
     }
 
@@ -137,11 +138,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         )
-        NSLog("DevCam: Keyboard shortcuts registered")
+        DevCamLogger.app.info("Keyboard shortcuts registered")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        NSLog("DevCam: Application terminating...")
+        DevCamLogger.app.info("Application terminating")
         Task { @MainActor in
             await recordingManager.stopRecording()
         }
@@ -159,7 +160,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             saveLocation: settings.saveLocation,
             showNotifications: settings.showNotifications
         )
-        NSLog("DevCam: Managers initialized")
+        DevCamLogger.app.info("Managers initialized")
     }
 
     private func showPreferences() {

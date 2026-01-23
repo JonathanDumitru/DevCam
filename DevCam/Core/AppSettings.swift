@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import OSLog
 
 @MainActor
 class AppSettings: ObservableObject {
@@ -69,9 +70,9 @@ class AppSettings: ObservableObject {
         // Full implementation would create/remove a LaunchAgent plist in ~/Library/LaunchAgents/
 
         if enabled {
-            NSLog("Launch at login enabled (not yet implemented)")
+            DevCamLogger.settings.info("Launch at login enabled (not yet implemented)")
         } else {
-            NSLog("Launch at login disabled")
+            DevCamLogger.settings.info("Launch at login disabled")
         }
     }
 }

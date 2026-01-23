@@ -10,6 +10,7 @@ import Foundation
 import Combine
 import AVFoundation
 import UserNotifications
+import OSLog
 
 enum ExportError: Error {
     case noSegmentsAvailable
@@ -79,7 +80,7 @@ class ClipExporter: NSObject, ObservableObject {
 
     func exportClip(duration: TimeInterval) async throws {
         guard !isExporting else {
-            print("Export already in progress")
+            DevCamLogger.export.notice("Export already in progress")
             return
         }
 
@@ -123,7 +124,7 @@ class ClipExporter: NSObject, ObservableObject {
 
     private func performExport(duration: TimeInterval) async throws {
         // Get segments from buffer
-        let segments = await bufferManager.getSegmentsForTimeRange(duration: duration)
+        let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
         guard !segments.isEmpty else {
             throw ExportError.noSegmentsAvailable
@@ -178,7 +179,9 @@ class ClipExporter: NSObject, ObservableObject {
             let asset = AVURLAsset(url: segment.fileURL)
 
             guard let assetVideoTrack = asset.tracks(withMediaType: .video).first else {
-                print("Warning: Segment \(segment.fileURL.lastPathComponent) has no video track, skipping")
+                DevCamLogger.export.notice(
+                    "Segment \(segment.fileURL.lastPathComponent, privacy: .public) has no video track; skipping"
+                )
                 continue
             }
 
@@ -188,7 +191,9 @@ class ClipExporter: NSObject, ObservableObject {
                 try videoTrack.insertTimeRange(timeRange, of: assetVideoTrack, at: currentTime)
                 currentTime = CMTimeAdd(currentTime, asset.duration)
             } catch {
-                print("Warning: Failed to insert segment \(segment.fileURL.lastPathComponent): \(error)")
+                DevCamLogger.export.notice(
+                    "Failed to insert segment \(segment.fileURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)"
+                )
                 // Continue with other segments
             }
         }
@@ -274,7 +279,9 @@ class ClipExporter: NSObject, ObservableObject {
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error = error {
-                print("Notification permission error: \(error)")
+                DevCamLogger.export.error(
+                    "Notification permission error: \(String(describing: error), privacy: .public)"
+                )
             }
         }
     }
@@ -293,7 +300,9 @@ class ClipExporter: NSObject, ObservableObject {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("Failed to show notification: \(error)")
+                DevCamLogger.export.error(
+                    "Failed to show notification: \(String(describing: error), privacy: .public)"
+                )
             }
         }
     }
@@ -302,7 +311,7 @@ class ClipExporter: NSObject, ObservableObject {
 
     private func exportTestClip(duration: TimeInterval) async throws {
         // Get segments from buffer
-        let segments = await bufferManager.getSegmentsForTimeRange(duration: duration)
+        let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
         guard !segments.isEmpty else {
             throw ExportError.noSegmentsAvailable

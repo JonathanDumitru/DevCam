@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import ScreenCaptureKit
+import AppKit
+import CoreGraphics
+import OSLog
 
 @MainActor
 class PermissionManager: ObservableObject {
