@@ -96,6 +96,20 @@ class AppSettings: ObservableObject {
     // MARK: - Initialization
 
     init() {
+        print("⚙️ DEBUG: AppSettings.init() - recordingQuality = \(recordingQuality.rawValue) (scale: \(recordingQuality.scaleFactor))")
+
+        // CRITICAL FIX: @AppStorage with enums defaults to first case (.low) if key doesn't exist
+        // Force set to .medium if we detect it's stuck on .low without an explicit user choice
+        if recordingQuality == .low {
+            // Check if this is truly unset (no value in UserDefaults)
+            if UserDefaults.standard.object(forKey: "recordingQuality") == nil {
+                print("⚙️ DEBUG: No quality setting found, defaulting incorrectly to .low, forcing to .medium")
+                recordingQuality = .medium
+            } else {
+                print("⚙️ DEBUG: Quality explicitly set to .low by user")
+            }
+        }
+
         // Ensure save location exists
         let location = saveLocation
         try? FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)

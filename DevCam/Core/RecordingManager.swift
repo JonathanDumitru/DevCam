@@ -251,7 +251,9 @@ class RecordingManager: NSObject, ObservableObject {
         let config = SCStreamConfiguration()
 
         // Apply resolution scaling based on quality setting
+        print("📺 DEBUG: Current quality setting: \(settings.recordingQuality.rawValue)")
         let scaleFactor = settings.recordingQuality.scaleFactor
+        print("📺 DEBUG: Scale factor: \(scaleFactor)")
         let scaledWidth = Int(Double(display.width) * scaleFactor)
         let scaledHeight = Int(Double(display.height) * scaleFactor)
 
