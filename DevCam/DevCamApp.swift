@@ -51,6 +51,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup UI
         setupStatusItem()
         setupKeyboardShortcuts()
+
+        // Start recording automatically
+        startRecording()
+    }
+
+    private func startRecording() {
+        Task { @MainActor in
+            do {
+                try await recordingManager.startRecording()
+                NSLog("DevCam: Recording started successfully")
+            } catch {
+                NSLog("DevCam: Failed to start recording: \(error)")
+                // Error will be set internally by RecordingManager
+            }
+        }
     }
 
     private func setupStatusItem() {
