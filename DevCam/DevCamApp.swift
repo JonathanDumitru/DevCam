@@ -22,6 +22,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSLog("DevCam: Application launching...")
+
         // Hide dock icon - this is a menubar-only app
         NSApp.setActivationPolicy(.accessory)
 
@@ -32,11 +34,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "DevCam")
             button.action = #selector(statusItemClicked)
             button.target = self
+            NSLog("DevCam: Status item created with action and target set")
+        } else {
+            NSLog("DevCam: ERROR - Failed to get status item button!")
         }
     }
 
     @objc func statusItemClicked() {
         // TODO: Show menu
         print("Status item clicked")
+        NSLog("DevCam: Status item clicked!")
     }
 }
