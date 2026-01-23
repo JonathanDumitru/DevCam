@@ -1,6 +1,9 @@
 import Foundation
 import OSLog
 
+/// Manages a circular buffer of on-disk segments for rolling screen recording.
+/// Keeps up to 15 one-minute segments and evicts the oldest when full.
+/// Runs on the main actor to keep buffer state and UI access consistent.
 @MainActor
 class BufferManager {
     private var segments: [SegmentInfo] = []
@@ -16,10 +19,10 @@ class BufferManager {
             self.bufferDirectory = appSupport.appendingPathComponent("DevCam/buffer")
         }
 
-        // Create directory if needed
         try? FileManager.default.createDirectory(at: self.bufferDirectory, withIntermediateDirectories: true)
     }
 
+    /// Adds a segment and evicts the oldest when the buffer exceeds `maxSegments`.
     func addSegment(url: URL, startTime: Date, duration: TimeInterval) {
         let segment = SegmentInfo(
             id: UUID(),
@@ -30,19 +33,16 @@ class BufferManager {
 
         segments.append(segment)
 
-        // Rotate if we exceed max segments
         if segments.count > maxSegments {
             deleteOldestSegment()
         }
     }
 
+    /// Removes the oldest segment and deletes its file from disk.
     func deleteOldestSegment() {
         guard let oldest = segments.first else { return }
 
-        // Delete file
         try? FileManager.default.removeItem(at: oldest.fileURL)
-
-        // Remove from array
         segments.removeFirst()
     }
 
@@ -54,18 +54,19 @@ class BufferManager {
         segments
     }
 
+    /// Returns the most recent segments covering `duration`, in chronological order.
+    /// If `duration` exceeds the buffer, returns all segments.
     func getSegmentsForTimeRange(duration: TimeInterval) -> [SegmentInfo] {
         let totalDuration = getCurrentBufferDuration()
 
-        // If requested duration is more than available, return all
         guard duration < totalDuration else {
             return segments
         }
 
-        // Get segments from the end (most recent)
         var collectedDuration: TimeInterval = 0
         var selectedSegments: [SegmentInfo] = []
 
+        // Iterate from newest to oldest, but preserve chronological order.
         for segment in segments.reversed() {
             selectedSegments.insert(segment, at: 0)
             collectedDuration += segment.duration

@@ -264,7 +264,9 @@ class RecordingManager: NSObject, ObservableObject {
     }
 
     private func createVideoInput(width: Int, height: Int) -> AVAssetWriterInput {
-        // Calculate bitrate: width × height × 0.15 bpp × 60fps
+        // Bitrate calculation: width × height × 0.15 bpp (bits per pixel) × 60 fps
+        // 0.15 bpp provides good quality/size balance for screen recordings
+        // This produces ~16 Mbps for 1920×1080 displays (1920 × 1080 × 0.15 × 60)
         let bitrate = width * height * 15 / 100 * 60
 
         let compressionSettings: [String: Any] = [
@@ -282,6 +284,16 @@ class RecordingManager: NSObject, ObservableObject {
         return input
     }
 
+    /// Processes video frames from ScreenCaptureKit and writes them to the current segment file.
+    ///
+    /// **Thread Safety**: Must run on @MainActor due to AVAssetWriter thread affinity.
+    /// AVAssetWriter requires all operations (startWriting, startSession, append) to occur
+    /// on the same thread where it was created.
+    ///
+    /// **Writer Initialization**: The isWriterReady flag ensures the writer session is initialized
+    /// on the first frame. This is necessary because AVAssetWriter.startSession requires a valid
+    /// CMTime source time, which we get from the first sample buffer's presentation timestamp.
+    /// This synchronizes the video timeline with the actual recording start time.
     func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) async {
         guard let writer = currentWriter,
               let input = currentWriterInput else {
@@ -418,12 +430,21 @@ class RecordingManager: NSObject, ObservableObject {
 // MARK: - SCStreamDelegate
 
 extension RecordingManager: SCStreamDelegate {
+    /// Handles stream errors from ScreenCaptureKit.
+    ///
+    /// **Thread Safety**: Marked `nonisolated` because SCStreamDelegate callbacks occur on
+    /// ScreenCaptureKit's internal thread (not main thread). We use `Task { @MainActor in ... }`
+    /// to safely transition back to main actor isolation for accessing RecordingManager's state.
+    ///
+    /// **Retry Strategy**: Implements exponential backoff (1s, 2s, 4s) to prevent rapid retry loops
+    /// on persistent failures. This gives transient issues (like display disconnection during
+    /// sleep/wake) time to resolve while avoiding excessive CPU usage.
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
             DevCamLogger.recording.error("Stream stopped with error: \(String(describing: error), privacy: .public)")
             self.recordingError = error
 
-            // Attempt retry with exponential backoff
+            // Attempt retry with exponential backoff: 1s, 2s, 4s intervals
             if retryCount < maxRetries {
                 let backoffDelay = pow(2.0, Double(retryCount)) // 1s, 2s, 4s
                 try? await Task.sleep(nanoseconds: UInt64(backoffDelay * 1_000_000_000))

@@ -42,6 +42,9 @@ class ClipExporter: NSObject, ObservableObject {
 
     // MARK: - Export Queue
 
+    // Export queue is for potential background work; current implementation
+    // uses @MainActor for simplicity. Could move heavy processing here in future
+    // (e.g., parallel segment validation, thumbnail generation, metadata extraction).
     private let exportQueue = DispatchQueue(label: "com.devcam.export", qos: .userInitiated)
     private var currentExportSession: AVAssetExportSession?
 
@@ -57,7 +60,6 @@ class ClipExporter: NSObject, ObservableObject {
         self.bufferManager = bufferManager
         self.showNotifications = showNotifications
 
-        // Use provided location or default to ~/Movies/DevCam/
         if let location = saveLocation {
             self.saveLocation = location
         } else {
@@ -67,10 +69,8 @@ class ClipExporter: NSObject, ObservableObject {
 
         super.init()
 
-        // Create save directory if needed
         try? FileManager.default.createDirectory(at: self.saveLocation, withIntermediateDirectories: true)
 
-        // Request notification permission if needed
         if showNotifications && !isTestMode {
             requestNotificationPermission()
         }
@@ -109,10 +109,7 @@ class ClipExporter: NSObject, ObservableObject {
     }
 
     func deleteClip(_ clip: ClipInfo) {
-        // Remove file
         try? FileManager.default.removeItem(at: clip.fileURL)
-
-        // Remove from recent clips
         recentClips.removeAll { $0.id == clip.id }
     }
 
@@ -123,26 +120,20 @@ class ClipExporter: NSObject, ObservableObject {
     // MARK: - Export Implementation
 
     private func performExport(duration: TimeInterval) async throws {
-        // Get segments from buffer
         let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
         guard !segments.isEmpty else {
             throw ExportError.noSegmentsAvailable
         }
 
-        // Calculate actual duration available
         let availableDuration = segments.reduce(0.0) { $0 + $1.duration }
 
-        // Create composition from segments
         let composition = try createComposition(from: segments)
 
-        // Generate output filename
         let outputURL = generateOutputURL()
 
-        // Export composition
         try await exportComposition(composition, to: outputURL)
 
-        // Create clip info
         let fileSize = try fileSize(at: outputURL)
         let clipInfo = ClipInfo(
             id: UUID(),
@@ -152,10 +143,8 @@ class ClipExporter: NSObject, ObservableObject {
             fileSize: fileSize
         )
 
-        // Add to recent clips
         addToRecentClips(clipInfo)
 
-        // Show notification
         if showNotifications {
             showExportNotification(clip: clipInfo)
         }
@@ -194,7 +183,7 @@ class ClipExporter: NSObject, ObservableObject {
                 DevCamLogger.export.notice(
                     "Failed to insert segment \(segment.fileURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)"
                 )
-                // Continue with other segments
+                // Skip failed segments so the export can still complete.
             }
         }
 
@@ -202,7 +191,6 @@ class ClipExporter: NSObject, ObservableObject {
     }
 
     private func exportComposition(_ composition: AVMutableComposition, to outputURL: URL) async throws {
-        // Remove existing file if present
         try? FileManager.default.removeItem(at: outputURL)
 
         guard let exportSession = AVAssetExportSession(
@@ -215,10 +203,9 @@ class ClipExporter: NSObject, ObservableObject {
         exportSession.outputURL = outputURL
         exportSession.outputFileType = .mp4
 
-        // Store for potential cancellation
         self.currentExportSession = exportSession
 
-        // Monitor progress
+        // Poll progress for UI updates; exportSession.progress is thread-safe.
         let progressTask = Task { @MainActor in
             while exportSession.status == .exporting || exportSession.status == .waiting {
                 self.exportProgress = Double(exportSession.progress)
@@ -226,13 +213,10 @@ class ClipExporter: NSObject, ObservableObject {
             }
         }
 
-        // Start export
         await exportSession.export()
 
-        // Stop progress monitoring
         progressTask.cancel()
 
-        // Check result
         switch exportSession.status {
         case .completed:
             self.exportProgress = 1.0
@@ -267,7 +251,6 @@ class ClipExporter: NSObject, ObservableObject {
     private func addToRecentClips(_ clip: ClipInfo) {
         recentClips.insert(clip, at: 0)
 
-        // Trim to max count
         if recentClips.count > maxRecentClips {
             recentClips = Array(recentClips.prefix(maxRecentClips))
         }
@@ -310,28 +293,23 @@ class ClipExporter: NSObject, ObservableObject {
     // MARK: - Test Mode
 
     private func exportTestClip(duration: TimeInterval) async throws {
-        // Get segments from buffer
         let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
         guard !segments.isEmpty else {
             throw ExportError.noSegmentsAvailable
         }
 
-        // Calculate actual duration
         let availableDuration = segments.reduce(0.0) { $0 + $1.duration }
 
-        // Create dummy output file
         let outputURL = generateOutputURL()
         let testContent = "TEST_CLIP_CONTENT_\(duration)s"
         try testContent.write(to: outputURL, atomically: true, encoding: .utf8)
 
-        // Simulate export progress
         for progress in stride(from: 0.0, through: 1.0, by: 0.2) {
             exportProgress = progress
             try await Task.sleep(nanoseconds: 50_000_000) // 0.05s
         }
 
-        // Create clip info
         let fileSize = Int64(testContent.count)
         let clipInfo = ClipInfo(
             id: UUID(),
@@ -341,7 +319,6 @@ class ClipExporter: NSObject, ObservableObject {
             fileSize: fileSize
         )
 
-        // Add to recent clips
         addToRecentClips(clipInfo)
 
         exportProgress = 1.0

@@ -34,6 +34,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
+    /// Application initialization flow on launch.
+    ///
+    /// **Initialization order (critical dependencies)**:
+    /// 1. setupManagers() - Creates manager instances in dependency order
+    /// 2. UI setup (if not test mode) - Status bar, keyboard shortcuts
+    /// 3. Auto-start recording - Begins continuous background recording
+    ///
+    /// **Test mode detection**: When XCTestConfigurationFilePath environment variable exists,
+    /// skips all UI setup (status bar, keyboard shortcuts) to allow headless testing.
+    /// Managers are still initialized to support unit tests that need them.
+    ///
+    /// **Auto-start recording**: Recording starts automatically on launch to maintain the
+    /// continuous 15-minute rolling buffer. Users don't need to manually start recording.
     func applicationDidFinishLaunching(_ notification: Notification) {
         DevCamLogger.app.info("Application launching")
 
@@ -148,6 +161,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Initializes core manager instances in dependency order.
+    ///
+    /// **Manager dependency chain**:
+    /// 1. AppSettings - No dependencies, stores user preferences
+    /// 2. BufferManager - No dependencies, manages segment storage
+    /// 3. RecordingManager - Depends on BufferManager (writes segments) and PermissionManager
+    /// 4. ClipExporter - Depends on BufferManager (reads segments) and AppSettings
+    ///
+    /// This initialization order ensures that when RecordingManager starts recording,
+    /// BufferManager is ready to receive segments. Similarly, ClipExporter can access
+    /// segments once BufferManager is initialized.
     private func setupManagers() {
         settings = AppSettings()
         bufferManager = BufferManager()

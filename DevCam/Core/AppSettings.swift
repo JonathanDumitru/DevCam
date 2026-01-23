@@ -10,6 +10,15 @@ import SwiftUI
 import Combine
 import OSLog
 
+/// Manages user preferences and application settings with automatic persistence.
+///
+/// Uses @AppStorage property wrappers for automatic UserDefaults synchronization.
+/// All setting changes are automatically persisted and published to SwiftUI views
+/// that observe this object via @ObservedObject or @StateObject.
+///
+/// **Persistence Strategy**: @AppStorage properties automatically sync with UserDefaults,
+/// so values persist across app launches. The `saveLocation` computed property converts
+/// between String paths (stored in UserDefaults) and URL objects (used by the app).
 @MainActor
 class AppSettings: ObservableObject {
 
@@ -62,6 +71,19 @@ class AppSettings: ObservableObject {
 
     // MARK: - Launch at Login
 
+    /// Configures launch at login preference.
+    ///
+    /// **Implementation Status**: Currently only stores the user preference in UserDefaults.
+    /// Full implementation requires creating a LaunchAgent plist at:
+    /// ~/Library/LaunchAgents/com.devcam.launcher.plist
+    ///
+    /// The plist should specify:
+    /// - Program path to DevCam.app
+    /// - RunAtLoad = true
+    /// - KeepAlive = false (launch once, not a daemon)
+    ///
+    /// Future work: Use SMLoginItemSetEnabled (deprecated) or ServiceManagement framework
+    /// to register/unregister the launch agent automatically.
     func configureLaunchAtLogin(_ enabled: Bool) {
         launchAtLogin = enabled
 
