@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let permissionManager = PermissionManager()
     private var bufferManager: BufferManager!
     private var recordingManager: RecordingManager!
+    private var clipExporter: ClipExporter!
 
     var isTestMode: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -74,6 +75,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordingManager = RecordingManager(
             bufferManager: bufferManager,
             permissionManager: permissionManager
+        )
+        clipExporter = ClipExporter(
+            bufferManager: bufferManager,
+            saveLocation: nil, // Uses default ~/Movies/DevCam/
+            showNotifications: true
         )
         NSLog("DevCam: Managers initialized")
     }
