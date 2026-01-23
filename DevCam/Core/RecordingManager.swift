@@ -96,7 +96,6 @@ class RecordingManager: NSObject, ObservableObject {
     func startRecording() async throws {
         guard !isRecording else { return }
 
-        // Check permissions
         guard permissionManager.hasScreenRecordingPermission else {
             throw RecordingError.permissionDenied
         }
@@ -166,23 +165,18 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - ScreenCaptureKit Setup
 
     private func setupAndStartStream() async throws {
-        // Get available displays
         let displays = try await getAvailableDisplays()
         guard let primaryDisplay = selectPrimaryDisplay(from: displays) else {
             throw RecordingError.noDisplaysAvailable
         }
 
-        // Create stream configuration
         let config = createStreamConfiguration(for: primaryDisplay)
 
-        // Create content filter
         let filter = try createContentFilter(for: primaryDisplay)
 
-        // Create stream output handler
         let output = VideoStreamOutput(recordingManager: self)
         self.streamOutput = output
 
-        // Create and start stream
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         self.stream = stream
 
@@ -190,10 +184,8 @@ class RecordingManager: NSObject, ObservableObject {
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: .main)
             try await stream.startCapture()
 
-            // Start first segment
             try await startNewSegment()
 
-            // Schedule segment rotation
             scheduleSegmentRotation()
 
         } catch {
@@ -210,14 +202,13 @@ class RecordingManager: NSObject, ObservableObject {
     }
 
     private func selectPrimaryDisplay(from displays: [SCDisplay]) -> SCDisplay? {
-        // Select main display (highest resolution or first available)
         return displays.max(by: { $0.width * $0.height < $1.width * $1.height })
     }
 
     private func createStreamConfiguration(for display: SCDisplay) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
 
-        // Store dimensions for later use
+        // Store dimensions for subsequent AVAssetWriter setup.
         currentDisplayWidth = display.width
         currentDisplayHeight = display.height
 
@@ -286,28 +277,21 @@ class RecordingManager: NSObject, ObservableObject {
 
     /// Processes video frames from ScreenCaptureKit and writes them to the current segment file.
     ///
-    /// **Thread Safety**: Must run on @MainActor due to AVAssetWriter thread affinity.
-    /// AVAssetWriter requires all operations (startWriting, startSession, append) to occur
-    /// on the same thread where it was created.
+    /// **Thread Safety**: AVAssetWriter operations must run on the thread where it was created.
     ///
-    /// **Writer Initialization**: The isWriterReady flag ensures the writer session is initialized
-    /// on the first frame. This is necessary because AVAssetWriter.startSession requires a valid
-    /// CMTime source time, which we get from the first sample buffer's presentation timestamp.
-    /// This synchronizes the video timeline with the actual recording start time.
+    /// **Initialization**: Start the writer on the first frame using its presentation timestamp.
     func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) async {
         guard let writer = currentWriter,
               let input = currentWriterInput else {
             return
         }
 
-        // Start writer session on first frame
         if !isWriterReady {
             writer.startWriting()
             writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
             isWriterReady = true
         }
 
-        // Write frame if ready
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
         }
@@ -323,19 +307,15 @@ class RecordingManager: NSObject, ObservableObject {
 
         let duration = Date().timeIntervalSince(startTime)
 
-        // Mark input as finished
         input.markAsFinished()
 
-        // Finish writing
         await writer.finishWriting()
 
         bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: duration)
 
-        // Update published buffer duration
         let totalDuration = bufferManager.getCurrentBufferDuration()
         self.bufferDuration = totalDuration
 
-        // Clear current segment
         currentWriter = nil
         currentWriterInput = nil
         currentSegmentURL = nil
@@ -362,7 +342,6 @@ class RecordingManager: NSObject, ObservableObject {
             DevCamLogger.recording.error("Error rotating segment: \(String(describing: error), privacy: .public)")
             recordingError = error
 
-            // Stop recording after multiple failures
             retryCount += 1
             if retryCount >= maxRetries {
                 await stopRecording()
@@ -398,10 +377,8 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - Test Mode
 
     private func startTestModeRecording() async throws {
-        // In test mode, create dummy segments without AVAssetWriter
         try await createTestSegment()
 
-        // Schedule segment rotation for test mode
         segmentTimer = Timer.scheduledTimer(withTimeInterval: segmentDuration, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 try? await self?.createTestSegment()
@@ -415,13 +392,11 @@ class RecordingManager: NSObject, ObservableObject {
         let segmentURL = bufferManager.getBufferDirectory().appendingPathComponent(filename)
         let startTime = Date()
 
-        // Create a dummy MP4 file (minimal valid MP4)
+        // Create a placeholder file for tests.
         try "TEST_VIDEO_CONTENT".write(to: segmentURL, atomically: true, encoding: .utf8)
 
-        // Add to buffer manager
         bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: 60.0)
 
-        // Update published buffer duration
         let totalDuration = bufferManager.getCurrentBufferDuration()
         self.bufferDuration = totalDuration
     }
@@ -432,19 +407,14 @@ class RecordingManager: NSObject, ObservableObject {
 extension RecordingManager: SCStreamDelegate {
     /// Handles stream errors from ScreenCaptureKit.
     ///
-    /// **Thread Safety**: Marked `nonisolated` because SCStreamDelegate callbacks occur on
-    /// ScreenCaptureKit's internal thread (not main thread). We use `Task { @MainActor in ... }`
-    /// to safely transition back to main actor isolation for accessing RecordingManager's state.
+    /// **Thread Safety**: Callbacks arrive off-main; hop to @MainActor before touching state.
     ///
-    /// **Retry Strategy**: Implements exponential backoff (1s, 2s, 4s) to prevent rapid retry loops
-    /// on persistent failures. This gives transient issues (like display disconnection during
-    /// sleep/wake) time to resolve while avoiding excessive CPU usage.
+    /// **Retry Strategy**: Exponential backoff (1s, 2s, 4s) before giving up.
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
             DevCamLogger.recording.error("Stream stopped with error: \(String(describing: error), privacy: .public)")
             self.recordingError = error
 
-            // Attempt retry with exponential backoff: 1s, 2s, 4s intervals
             if retryCount < maxRetries {
                 let backoffDelay = pow(2.0, Double(retryCount)) // 1s, 2s, 4s
                 try? await Task.sleep(nanoseconds: UInt64(backoffDelay * 1_000_000_000))
