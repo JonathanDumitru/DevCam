@@ -10,6 +10,53 @@ import SwiftUI
 import Combine
 import OSLog
 
+/// Recording quality levels that determine resolution scaling and performance impact.
+///
+/// **Performance vs Quality:**
+/// - **Low (720p):** Best performance, ~75% smaller files, recommended for long sessions
+/// - **Medium (1080p):** Balanced quality and performance, good for most use cases
+/// - **High (Native):** Maximum quality, highest resource usage, best for demos/tutorials
+///
+/// The quality setting affects the captured resolution by scaling the display dimensions.
+/// Lower quality = lower resolution = less CPU/GPU load and smaller file sizes.
+enum RecordingQuality: String, CaseIterable, Identifiable, Codable {
+    case low = "low"
+    case medium = "medium"
+    case high = "high"
+
+    var id: String { rawValue }
+
+    /// Display name for UI
+    var displayName: String {
+        switch self {
+        case .low: return "Low (720p)"
+        case .medium: return "Medium (1080p)"
+        case .high: return "High (Native Resolution)"
+        }
+    }
+
+    /// Scale factor applied to display dimensions
+    var scaleFactor: Double {
+        switch self {
+        case .low: return 0.5      // ~720p from 1440p, or 540p from 1080p
+        case .medium: return 0.75  // ~1080p from 1440p, or 810p from 1080p
+        case .high: return 1.0     // Native resolution
+        }
+    }
+
+    /// Human-readable description for UI
+    var description: String {
+        switch self {
+        case .low:
+            return "Best performance, smaller files (~25% of native resolution)"
+        case .medium:
+            return "Balanced quality and performance (~56% of native resolution)"
+        case .high:
+            return "Maximum quality, highest resource usage (100% native resolution)"
+        }
+    }
+}
+
 /// Manages user preferences and application settings with automatic persistence.
 ///
 /// Uses @AppStorage property wrappers for automatic UserDefaults synchronization.
@@ -28,6 +75,7 @@ class AppSettings: ObservableObject {
     @AppStorage("launchAtLogin") var launchAtLogin: Bool = false
     @AppStorage("showNotifications") var showNotifications: Bool = true
     @AppStorage("bufferSize") var bufferSize: Int = 900 // 15 minutes default
+    @AppStorage("recordingQuality") var recordingQuality: RecordingQuality = .medium
 
     // Save location as URL
     var saveLocation: URL {

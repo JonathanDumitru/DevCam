@@ -9,6 +9,7 @@ import SwiftUI
 
 struct GeneralTab: View {
     @ObservedObject var settings: AppSettings
+    @State private var qualityChanged = false
 
     var body: some View {
         Form {
@@ -40,6 +41,32 @@ struct GeneralTab: View {
             }
 
             Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Recording Quality")
+                        .font(.headline)
+
+                    Picker("Quality", selection: $settings.recordingQuality) {
+                        ForEach(RecordingQuality.allCases) { quality in
+                            Text(quality.displayName).tag(quality)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: settings.recordingQuality) { _, _ in
+                        qualityChanged = true
+                    }
+
+                    Text(settings.recordingQuality.description)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if qualityChanged {
+                        Label("Restart DevCam to apply new quality setting", systemImage: "info.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange)
+                    }
+                }
+
                 Toggle("Launch at Login", isOn: $settings.launchAtLogin)
                     .onChange(of: settings.launchAtLogin) { _, newValue in
                         settings.configureLaunchAtLogin(newValue)

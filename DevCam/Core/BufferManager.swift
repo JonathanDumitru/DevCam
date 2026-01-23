@@ -11,15 +11,24 @@ class BufferManager {
     private let maxSegments = 15 // 15 minutes at 1 minute per segment
 
     init(bufferDirectory: URL? = nil) {
+        print("💾 DEBUG: BufferManager.init() - Initializing")
         if let directory = bufferDirectory {
+            print("💾 DEBUG: Using provided buffer directory: \(directory.path)")
             self.bufferDirectory = directory
         } else {
             // Default: ~/Library/Application Support/DevCam/buffer/
             let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             self.bufferDirectory = appSupport.appendingPathComponent("DevCam/buffer")
+            print("💾 DEBUG: Using default buffer directory: \(self.bufferDirectory.path)")
         }
 
-        try? FileManager.default.createDirectory(at: self.bufferDirectory, withIntermediateDirectories: true)
+        print("💾 DEBUG: Creating buffer directory if needed")
+        do {
+            try FileManager.default.createDirectory(at: self.bufferDirectory, withIntermediateDirectories: true)
+            print("✅ DEBUG: Buffer directory created/verified: \(self.bufferDirectory.path)")
+        } catch {
+            print("❌ DEBUG: Failed to create buffer directory: \(error)")
+        }
     }
 
     /// Adds a segment and evicts the oldest when the buffer exceeds `maxSegments`.

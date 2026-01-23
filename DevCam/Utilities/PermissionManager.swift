@@ -27,8 +27,19 @@ class PermissionManager: ObservableObject {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
-    init() {
+    // CRITICAL: init must NOT be isolated to MainActor because it's called during
+    // AppDelegate initialization, which may not be on MainActor yet.
+    // We'll check permission later in a MainActor context.
+    nonisolated init() {
+        print("🔐 DEBUG: PermissionManager.init() - Deferring permission check")
+        print("🔐 DEBUG: PermissionManager initialized - will check permission on main actor")
+    }
+
+    // Call this after initialization to actually check permission
+    func initialize() {
+        print("🔐 DEBUG: PermissionManager.initialize() - Checking permission on MainActor")
         checkPermission()
+        print("🔐 DEBUG: PermissionManager initialized - hasScreenRecordingPermission = \(hasScreenRecordingPermission)")
     }
 
     /// Returns the current screen recording permission status.
@@ -68,13 +79,19 @@ class PermissionManager: ObservableObject {
     }
 
     func checkPermission() {
+        print("🔐 DEBUG: checkPermission() called")
         if isTestMode {
+            print("🧪 DEBUG: Test mode detected - granting permission automatically")
             // In test mode, grant permission by default to allow tests to run
             hasScreenRecordingPermission = true
             return
         }
 
-        hasScreenRecordingPermission = CGPreflightScreenCaptureAccess()
+        print("🔐 DEBUG: Calling CGPreflightScreenCaptureAccess()")
+        let result = CGPreflightScreenCaptureAccess()
+        print("🔐 DEBUG: CGPreflightScreenCaptureAccess() returned: \(result)")
+        hasScreenRecordingPermission = result
+        print("🔐 DEBUG: hasScreenRecordingPermission set to: \(hasScreenRecordingPermission)")
     }
 
     func openSystemSettings() {

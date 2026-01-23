@@ -109,7 +109,13 @@ struct MenuBarView: View {
     private func saveButton(duration: TimeInterval, title: String, shortcut: String) -> some View {
         Button(action: {
             Task {
-                try? await clipExporter.exportClip(duration: duration)
+                do {
+                    print("💾 DEBUG: Attempting to export \(duration) second clip")
+                    try await clipExporter.exportClip(duration: duration)
+                    print("✅ DEBUG: Export completed successfully")
+                } catch {
+                    print("❌ DEBUG: Export failed: \(error)")
+                }
             }
         }) {
             HStack {
@@ -160,9 +166,11 @@ struct MenuBarView: View {
 #Preview {
     let bufferManager = BufferManager()
     let permissionManager = PermissionManager()
+    let settings = AppSettings()
     let recordingManager = RecordingManager(
         bufferManager: bufferManager,
-        permissionManager: permissionManager
+        permissionManager: permissionManager,
+        settings: settings
     )
     let clipExporter = ClipExporter(
         bufferManager: bufferManager,
@@ -170,7 +178,7 @@ struct MenuBarView: View {
         showNotifications: false
     )
 
-    return MenuBarView(
+    MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
         onPreferences: { print("Preferences") },

@@ -36,6 +36,7 @@ class RecordingManager: NSObject, ObservableObject {
 
     private let bufferManager: BufferManager
     private let permissionManager: PermissionManager
+    private let settings: AppSettings
 
     // MARK: - ScreenCaptureKit
 
@@ -75,9 +76,10 @@ class RecordingManager: NSObject, ObservableObject {
 
     // MARK: - Initialization
 
-    init(bufferManager: BufferManager, permissionManager: PermissionManager) {
+    init(bufferManager: BufferManager, permissionManager: PermissionManager, settings: AppSettings) {
         self.bufferManager = bufferManager
         self.permissionManager = permissionManager
+        self.settings = settings
         super.init()
         setupSystemEventObservers()
     }
@@ -94,24 +96,41 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - Public API
 
     func startRecording() async throws {
-        guard !isRecording else { return }
+        print("🎥 DEBUG: RecordingManager.startRecording() CALLED")
+        print("🎥 DEBUG: isRecording = \(isRecording)")
+
+        guard !isRecording else {
+            print("⚠️ DEBUG: Already recording, returning early")
+            return
+        }
+
+        print("🎥 DEBUG: Checking screen recording permission")
+        print("🎥 DEBUG: hasScreenRecordingPermission = \(permissionManager.hasScreenRecordingPermission)")
 
         guard permissionManager.hasScreenRecordingPermission else {
+            print("❌ DEBUG: Permission DENIED - throwing RecordingError.permissionDenied")
             throw RecordingError.permissionDenied
         }
 
+        print("✅ DEBUG: Permission granted, proceeding with recording setup")
+
         do {
             if isTestMode {
+                print("🧪 DEBUG: isTestMode = true, calling startTestModeRecording()")
                 try await startTestModeRecording()
             } else {
+                print("🎬 DEBUG: isTestMode = false, calling setupAndStartStream()")
                 try await setupAndStartStream()
+                print("✅ DEBUG: setupAndStartStream() completed successfully")
             }
 
             isRecording = true
             recordingError = nil
             retryCount = 0
+            print("✅ DEBUG: Recording started successfully! isRecording = \(isRecording)")
 
         } catch {
+            print("❌ DEBUG: Error during recording setup: \(error)")
             recordingError = error
             throw error
         }
@@ -165,30 +184,53 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - ScreenCaptureKit Setup
 
     private func setupAndStartStream() async throws {
+        print("📺 DEBUG: setupAndStartStream() - Getting available displays")
         let displays = try await getAvailableDisplays()
+        print("📺 DEBUG: Found \(displays.count) displays")
+
         guard let primaryDisplay = selectPrimaryDisplay(from: displays) else {
+            print("❌ DEBUG: No primary display found - throwing noDisplaysAvailable")
             throw RecordingError.noDisplaysAvailable
         }
+        print("📺 DEBUG: Selected primary display: \(primaryDisplay.width)x\(primaryDisplay.height)")
 
+        print("📺 DEBUG: Creating stream configuration")
         let config = createStreamConfiguration(for: primaryDisplay)
+        print("📺 DEBUG: Stream config created: \(config.width)x\(config.height) @ \(config.minimumFrameInterval)")
 
+        print("📺 DEBUG: Creating content filter")
         let filter = try createContentFilter(for: primaryDisplay)
+        print("✅ DEBUG: Content filter created")
 
+        print("📺 DEBUG: Creating VideoStreamOutput")
         let output = VideoStreamOutput(recordingManager: self)
         self.streamOutput = output
+        print("✅ DEBUG: VideoStreamOutput created and stored")
 
+        print("📺 DEBUG: Creating SCStream")
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         self.stream = stream
+        print("✅ DEBUG: SCStream created")
 
         do {
+            print("📺 DEBUG: Adding stream output to SCStream")
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: .main)
+            print("✅ DEBUG: Stream output added")
+
+            print("📺 DEBUG: Starting stream capture (await)")
             try await stream.startCapture()
+            print("✅ DEBUG: Stream capture started successfully!")
 
+            print("📺 DEBUG: Starting new segment (await)")
             try await startNewSegment()
+            print("✅ DEBUG: New segment started")
 
+            print("📺 DEBUG: Scheduling segment rotation timer")
             scheduleSegmentRotation()
+            print("✅ DEBUG: Segment rotation scheduled")
 
         } catch {
+            print("❌ DEBUG: Error in setupAndStartStream: \(error)")
             throw RecordingError.streamSetupFailed
         }
     }
@@ -208,17 +250,24 @@ class RecordingManager: NSObject, ObservableObject {
     private func createStreamConfiguration(for display: SCDisplay) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
 
-        // Store dimensions for subsequent AVAssetWriter setup.
-        currentDisplayWidth = display.width
-        currentDisplayHeight = display.height
+        // Apply resolution scaling based on quality setting
+        let scaleFactor = settings.recordingQuality.scaleFactor
+        let scaledWidth = Int(Double(display.width) * scaleFactor)
+        let scaledHeight = Int(Double(display.height) * scaleFactor)
 
-        config.width = display.width
-        config.height = display.height
+        // Store scaled dimensions for subsequent AVAssetWriter setup
+        currentDisplayWidth = scaledWidth
+        currentDisplayHeight = scaledHeight
+
+        config.width = scaledWidth
+        config.height = scaledHeight
         config.minimumFrameInterval = CMTime(value: 1, timescale: 60) // 60 fps
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.colorSpaceName = CGColorSpace.sRGB
         config.queueDepth = 5
         config.showsCursor = true
+
+        print("📺 DEBUG: Recording at \(scaledWidth)×\(scaledHeight) (quality: \(settings.recordingQuality.displayName), scale: \(scaleFactor))")
 
         return config
     }
@@ -230,15 +279,22 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - AVAssetWriter Management
 
     private func startNewSegment() async throws {
+        print("📝 DEBUG: startNewSegment() - Creating new segment")
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = "segment_\(timestamp).mp4"
-        let segmentURL = bufferManager.getBufferDirectory().appendingPathComponent(filename)
+        let bufferDir = bufferManager.getBufferDirectory()
+        print("📝 DEBUG: Buffer directory: \(bufferDir.path)")
+        let segmentURL = bufferDir.appendingPathComponent(filename)
+        print("📝 DEBUG: Segment URL: \(segmentURL.path)")
 
         guard let writer = try? AVAssetWriter(outputURL: segmentURL, fileType: .mp4) else {
+            print("❌ DEBUG: Failed to create AVAssetWriter")
             throw RecordingError.writerSetupFailed
         }
+        print("✅ DEBUG: AVAssetWriter created")
 
         // Use stored display dimensions
+        print("📝 DEBUG: Creating video input: \(currentDisplayWidth)x\(currentDisplayHeight)")
         let input = createVideoInput(width: currentDisplayWidth, height: currentDisplayHeight)
 
         guard writer.canAdd(input) else {
@@ -260,16 +316,22 @@ class RecordingManager: NSObject, ObservableObject {
         // This produces ~16 Mbps for 1920×1080 displays (1920 × 1080 × 0.15 × 60)
         let bitrate = width * height * 15 / 100 * 60
 
-        let compressionSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
+        // CRITICAL FIX: Compression properties must be nested in AVVideoCompressionPropertiesKey
+        // NOT passed at the top level of outputSettings
+        let compressionProperties: [String: Any] = [
             AVVideoAverageBitRateKey: bitrate,
             AVVideoExpectedSourceFrameRateKey: 60,
             AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
         ]
 
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: compressionSettings)
+        let outputSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: compressionProperties
+        ]
+
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: outputSettings)
         input.expectsMediaDataInRealTime = true
 
         return input
@@ -283,6 +345,12 @@ class RecordingManager: NSObject, ObservableObject {
     func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) async {
         guard let writer = currentWriter,
               let input = currentWriterInput else {
+            return
+        }
+
+        // CRITICAL: ScreenCaptureKit occasionally sends metadata frames without pixel data
+        // (cursor updates, window notifications, etc.). Skip these silently.
+        guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else {
             return
         }
 
