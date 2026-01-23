@@ -20,12 +20,22 @@ struct DevCamApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
+    private let permissionManager = PermissionManager()
+    private var bufferManager: BufferManager!
+    private var recordingManager: RecordingManager!
+
+    var isTestMode: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSLog("DevCam: Application launching...")
 
+        // Initialize managers (works in both normal and test mode)
+        setupManagers()
+
         // Skip UI setup in test environment
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+        if isTestMode {
             NSLog("DevCam: Running in test mode, skipping UI setup")
             return
         }
@@ -50,5 +60,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // TODO: Show menu
         print("Status item clicked")
         NSLog("DevCam: Status item clicked!")
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        NSLog("DevCam: Application terminating...")
+        Task { @MainActor in
+            await recordingManager.stopRecording()
+        }
+    }
+
+    private func setupManagers() {
+        bufferManager = BufferManager()
+        recordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager
+        )
+        NSLog("DevCam: Managers initialized")
     }
 }

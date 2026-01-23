@@ -12,9 +12,7 @@ class PermissionManager: ObservableObject {
     }
 
     init() {
-        if !isTestMode {
-            checkPermission()
-        }
+        checkPermission()
     }
 
     func screenRecordingPermissionStatus() -> String {
@@ -45,7 +43,8 @@ class PermissionManager: ObservableObject {
 
     func checkPermission() {
         if isTestMode {
-            hasScreenRecordingPermission = false
+            // In test mode, grant permission by default to allow tests to run
+            hasScreenRecordingPermission = true
             return
         }
 

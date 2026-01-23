@@ -82,4 +82,8 @@ actor BufferManager {
         }
         segments.removeAll()
     }
+
+    func getBufferDirectory() -> URL {
+        bufferDirectory
+    }
 }
