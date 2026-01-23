@@ -24,6 +24,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSLog("DevCam: Application launching...")
 
+        // Skip UI setup in test environment
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            NSLog("DevCam: Running in test mode, skipping UI setup")
+            return
+        }
+
         // Hide dock icon - this is a menubar-only app
         NSApp.setActivationPolicy(.accessory)
 
