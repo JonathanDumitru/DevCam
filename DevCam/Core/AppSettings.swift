@@ -100,13 +100,16 @@ class AppSettings: ObservableObject {
 
         // CRITICAL FIX: @AppStorage with enums defaults to first case (.low) if key doesn't exist
         // Force set to .medium if we detect it's stuck on .low without an explicit user choice
+        let storedValue = UserDefaults.standard.object(forKey: "recordingQuality")
+        print("⚙️ DEBUG: UserDefaults.standard.object(forKey: \"recordingQuality\") = \(String(describing: storedValue))")
+
         if recordingQuality == .low {
             // Check if this is truly unset (no value in UserDefaults)
-            if UserDefaults.standard.object(forKey: "recordingQuality") == nil {
+            if storedValue == nil {
                 print("⚙️ DEBUG: No quality setting found, defaulting incorrectly to .low, forcing to .medium")
                 recordingQuality = .medium
             } else {
-                print("⚙️ DEBUG: Quality explicitly set to .low by user")
+                print("⚙️ DEBUG: Quality explicitly set to .low by user (stored value: \(String(describing: storedValue)))")
             }
         }
 
