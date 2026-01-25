@@ -39,6 +39,7 @@ class ClipExporter: NSObject, ObservableObject {
     private var saveLocation: URL
     private let showNotifications: Bool
     private let maxRecentClips: Int = 20
+    private let recentClipsKey = "recentClips"
 
     // MARK: - Export Queue
 
@@ -70,6 +71,9 @@ class ClipExporter: NSObject, ObservableObject {
         super.init()
 
         try? FileManager.default.createDirectory(at: self.saveLocation, withIntermediateDirectories: true)
+
+        // Load persisted recent clips
+        loadRecentClips()
 
         if showNotifications && !isTestMode {
             requestNotificationPermission()
@@ -111,10 +115,12 @@ class ClipExporter: NSObject, ObservableObject {
     func deleteClip(_ clip: ClipInfo) {
         try? FileManager.default.removeItem(at: clip.fileURL)
         recentClips.removeAll { $0.id == clip.id }
+        saveRecentClips()
     }
 
     func clearRecentClips() {
         recentClips.removeAll()
+        saveRecentClips()
     }
 
     // MARK: - Export Implementation
@@ -254,6 +260,8 @@ class ClipExporter: NSObject, ObservableObject {
         if recentClips.count > maxRecentClips {
             recentClips = Array(recentClips.prefix(maxRecentClips))
         }
+
+        saveRecentClips()
     }
 
     // MARK: - Notifications
@@ -322,6 +330,30 @@ class ClipExporter: NSObject, ObservableObject {
         addToRecentClips(clipInfo)
 
         exportProgress = 1.0
+    }
+
+    // MARK: - Persistence
+
+    private func loadRecentClips() {
+        guard let data = UserDefaults.standard.data(forKey: recentClipsKey),
+              let clips = try? JSONDecoder().decode([ClipInfo].self, from: data) else {
+            return
+        }
+
+        // Filter out clips whose files no longer exist
+        recentClips = clips.filter { FileManager.default.fileExists(atPath: $0.fileURL.path) }
+
+        // Save filtered list if any clips were removed
+        if recentClips.count != clips.count {
+            saveRecentClips()
+        }
+    }
+
+    private func saveRecentClips() {
+        guard let data = try? JSONEncoder().encode(recentClips) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: recentClipsKey)
     }
 
     // MARK: - Cancellation

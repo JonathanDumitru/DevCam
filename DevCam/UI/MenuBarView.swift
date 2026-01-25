@@ -14,6 +14,9 @@ struct MenuBarView: View {
     let onPreferences: () -> Void
     let onQuit: () -> Void
 
+    @State private var selectedDuration: Double = 300 // Default 5 minutes (in seconds)
+    @State private var showAdvancedWindow = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Status section
@@ -30,6 +33,12 @@ struct MenuBarView: View {
             settingsSection
         }
         .frame(width: 250)
+        .sheet(isPresented: $showAdvancedWindow) {
+            AdvancedClipWindow(
+                recordingManager: recordingManager,
+                clipExporter: clipExporter
+            )
+        }
     }
 
     // MARK: - Status Section
@@ -99,43 +108,85 @@ struct MenuBarView: View {
     // MARK: - Save Actions Section
 
     private var saveActionsSection: some View {
-        VStack(spacing: 0) {
-            saveButton(duration: 300, title: "Save Last 5 Minutes", shortcut: "⌘⇧5")
-            saveButton(duration: 600, title: "Save Last 10 Minutes", shortcut: "⌘⇧6")
-            saveButton(duration: 900, title: "Save Last 15 Minutes", shortcut: "⌘⇧7")
-        }
-    }
-
-    private func saveButton(duration: TimeInterval, title: String, shortcut: String) -> some View {
-        Button(action: {
-            Task {
-                do {
-                    print("💾 DEBUG: Attempting to export \(duration) second clip")
-                    try await clipExporter.exportClip(duration: duration)
-                    print("✅ DEBUG: Export completed successfully")
-                } catch {
-                    print("❌ DEBUG: Export failed: \(error)")
-                }
-            }
-        }) {
+        VStack(spacing: 12) {
+            // Title
             HStack {
-                Text(title)
-                    .font(.system(size: 13))
+                Text("Save Clip")
+                    .font(.system(size: 13, weight: .medium))
                 Spacer()
-                Text(shortcut)
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
             }
-            .contentShape(Rectangle())
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+
+            // Duration slider
+            VStack(spacing: 8) {
+                Slider(value: $selectedDuration, in: 60...900, step: 60)
+                    .padding(.horizontal, 12)
+
+                HStack {
+                    Text(formatDuration(selectedDuration))
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("Max: \(formatDuration(min(recordingManager.bufferDuration, 900)))")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+            }
+
+            // Save button
+            Button(action: {
+                Task {
+                    do {
+                        print("💾 DEBUG: Attempting to export \(selectedDuration) second clip")
+                        try await clipExporter.exportClip(duration: selectedDuration)
+                        print("✅ DEBUG: Export completed successfully")
+                    } catch {
+                        print("❌ DEBUG: Export failed: \(error)")
+                    }
+                }
+            }) {
+                Text("Save Clip")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal, 12)
+            .disabled(!canSave())
+
+            // Advanced button
+            Button(action: {
+                showAdvancedWindow = true
+            }) {
+                HStack {
+                    Text("Advanced...")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 10))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            .disabled(!canSave())
+            .opacity(canSave() ? 1.0 : 0.5)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .disabled(!canSave(duration: duration))
-        .opacity(canSave(duration: duration) ? 1.0 : 0.5)
     }
 
-    private func canSave(duration: TimeInterval) -> Bool {
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        if secs == 0 {
+            return "\(minutes) min"
+        } else {
+            return "\(minutes):\(String(format: "%02d", secs))"
+        }
+    }
+
+    private func canSave() -> Bool {
         // Can save if we have any buffer content and not currently exporting
         return recordingManager.bufferDuration > 0 && !clipExporter.isExporting
     }

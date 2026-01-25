@@ -9,7 +9,7 @@ import SwiftUI
 
 struct GeneralTab: View {
     @ObservedObject var settings: AppSettings
-    @State private var qualityChanged = false
+    @State private var initialQuality: RecordingQuality?
 
     var body: some View {
         Form {
@@ -51,8 +51,11 @@ struct GeneralTab: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: settings.recordingQuality) { _, _ in
-                        qualityChanged = true
+                    .onAppear {
+                        // Capture initial quality when view appears
+                        if initialQuality == nil {
+                            initialQuality = settings.recordingQuality
+                        }
                     }
 
                     Text(settings.recordingQuality.description)
@@ -60,7 +63,8 @@ struct GeneralTab: View {
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if qualityChanged {
+                    // Only show warning if quality has actually changed from initial value
+                    if let initial = initialQuality, settings.recordingQuality != initial {
                         Label("Restart DevCam to apply new quality setting", systemImage: "info.circle.fill")
                             .font(.system(size: 11))
                             .foregroundColor(.orange)
