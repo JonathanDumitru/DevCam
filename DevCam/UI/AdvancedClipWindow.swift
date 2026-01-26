@@ -225,17 +225,14 @@ struct AdvancedClipWindow: View {
 
         Task {
             do {
-                print("💾 DEBUG: Advanced export - duration: \(clipDuration)s, start: \(startOffset)s, end: \(endOffset)s")
                 // For now, export the clip duration (we'll add start offset support later)
                 try await clipExporter.exportClip(duration: clipDuration)
-                print("✅ DEBUG: Advanced export completed successfully")
 
                 await MainActor.run {
                     isExporting = false
                     dismiss()
                 }
             } catch {
-                print("❌ DEBUG: Advanced export failed: \(error)")
                 await MainActor.run {
                     isExporting = false
                 }

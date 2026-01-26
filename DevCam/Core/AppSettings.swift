@@ -96,20 +96,17 @@ class AppSettings: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        print("⚙️ DEBUG: AppSettings.init() - recordingQuality = \(recordingQuality.rawValue) (scale: \(recordingQuality.scaleFactor))")
-
         // CRITICAL FIX: @AppStorage with enums defaults to first case (.low) if key doesn't exist
         // Force set to .medium if we detect it's stuck on .low without an explicit user choice
         let storedValue = UserDefaults.standard.object(forKey: "recordingQuality")
-        print("⚙️ DEBUG: UserDefaults.standard.object(forKey: \"recordingQuality\") = \(String(describing: storedValue))")
 
         if recordingQuality == .low {
             // Check if this is truly unset (no value in UserDefaults)
             if storedValue == nil {
-                print("⚙️ DEBUG: No quality setting found, defaulting incorrectly to .low, forcing to .medium")
                 recordingQuality = .medium
+                DevCamLogger.settings.debug("No quality setting found, defaulting to .medium")
             } else {
-                print("⚙️ DEBUG: Quality explicitly set to .low by user (stored value: \(String(describing: storedValue)))")
+                DevCamLogger.settings.debug("Quality explicitly set to .low by user")
             }
         }
 

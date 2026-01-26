@@ -102,41 +102,32 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - Public API
 
     func startRecording() async throws {
-        print("🎥 DEBUG: RecordingManager.startRecording() CALLED")
-        print("🎥 DEBUG: isRecording = \(isRecording)")
-
         guard !isRecording else {
-            print("⚠️ DEBUG: Already recording, returning early")
+            DevCamLogger.recording.debug("Already recording, skipping")
             return
         }
 
-        print("🎥 DEBUG: Checking screen recording permission")
-        print("🎥 DEBUG: hasScreenRecordingPermission = \(permissionManager.hasScreenRecordingPermission)")
-
         guard permissionManager.hasScreenRecordingPermission else {
-            print("❌ DEBUG: Permission DENIED - throwing RecordingError.permissionDenied")
+            DevCamLogger.recording.error("Screen recording permission denied")
             throw RecordingError.permissionDenied
         }
 
-        print("✅ DEBUG: Permission granted, proceeding with recording setup")
+        DevCamLogger.recording.info("Starting recording")
 
         do {
             if isTestMode {
-                print("🧪 DEBUG: isTestMode = true, calling startTestModeRecording()")
                 try await startTestModeRecording()
             } else {
-                print("🎬 DEBUG: isTestMode = false, calling setupAndStartStream()")
                 try await setupAndStartStream()
-                print("✅ DEBUG: setupAndStartStream() completed successfully")
             }
 
             isRecording = true
             recordingError = nil
             retryCount = 0
-            print("✅ DEBUG: Recording started successfully! isRecording = \(isRecording)")
+            DevCamLogger.recording.info("Recording started successfully")
 
         } catch {
-            print("❌ DEBUG: Error during recording setup: \(error)")
+            DevCamLogger.recording.error("Failed to start recording: \(error.localizedDescription)")
             recordingError = error
             throw error
         }
@@ -190,53 +181,33 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - ScreenCaptureKit Setup
 
     private func setupAndStartStream() async throws {
-        print("📺 DEBUG: setupAndStartStream() - Getting available displays")
         let displays = try await getAvailableDisplays()
-        print("📺 DEBUG: Found \(displays.count) displays")
+        DevCamLogger.recording.debug("Found \(displays.count) display(s)")
 
         guard let primaryDisplay = selectPrimaryDisplay(from: displays) else {
-            print("❌ DEBUG: No primary display found - throwing noDisplaysAvailable")
+            DevCamLogger.recording.error("No primary display found")
             throw RecordingError.noDisplaysAvailable
         }
-        print("📺 DEBUG: Selected primary display: \(primaryDisplay.width)x\(primaryDisplay.height)")
 
-        print("📺 DEBUG: Creating stream configuration")
         let config = createStreamConfiguration(for: primaryDisplay)
-        print("📺 DEBUG: Stream config created: \(config.width)x\(config.height) @ \(config.minimumFrameInterval)")
+        DevCamLogger.recording.info("Recording at \(config.width)x\(config.height)")
 
-        print("📺 DEBUG: Creating content filter")
         let filter = try createContentFilter(for: primaryDisplay)
-        print("✅ DEBUG: Content filter created")
-
-        print("📺 DEBUG: Creating VideoStreamOutput")
         let output = VideoStreamOutput(recordingManager: self)
         self.streamOutput = output
-        print("✅ DEBUG: VideoStreamOutput created and stored")
 
-        print("📺 DEBUG: Creating SCStream")
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         self.stream = stream
-        print("✅ DEBUG: SCStream created")
 
         do {
-            print("📺 DEBUG: Adding stream output to SCStream")
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: .main)
-            print("✅ DEBUG: Stream output added")
-
-            print("📺 DEBUG: Starting stream capture (await)")
             try await stream.startCapture()
-            print("✅ DEBUG: Stream capture started successfully!")
-
-            print("📺 DEBUG: Starting new segment (await)")
             try await startNewSegment()
-            print("✅ DEBUG: New segment started")
-
-            print("📺 DEBUG: Scheduling segment rotation timer")
             scheduleSegmentRotation()
-            print("✅ DEBUG: Segment rotation scheduled")
+            DevCamLogger.recording.info("Stream capture started, segment rotation scheduled")
 
         } catch {
-            print("❌ DEBUG: Error in setupAndStartStream: \(error)")
+            DevCamLogger.recording.error("Stream setup failed: \(error.localizedDescription)")
             throw RecordingError.streamSetupFailed
         }
     }
@@ -257,9 +228,7 @@ class RecordingManager: NSObject, ObservableObject {
         let config = SCStreamConfiguration()
 
         // Apply resolution scaling based on quality setting
-        print("📺 DEBUG: Current quality setting: \(settings.recordingQuality.rawValue)")
         let scaleFactor = settings.recordingQuality.scaleFactor
-        print("📺 DEBUG: Scale factor: \(scaleFactor)")
         let scaledWidth = Int(Double(display.width) * scaleFactor)
         let scaledHeight = Int(Double(display.height) * scaleFactor)
 
@@ -275,7 +244,7 @@ class RecordingManager: NSObject, ObservableObject {
         config.queueDepth = 5
         config.showsCursor = true
 
-        print("📺 DEBUG: Recording at \(scaledWidth)×\(scaledHeight) (quality: \(settings.recordingQuality.displayName), scale: \(scaleFactor))")
+        DevCamLogger.recording.debug("Stream configured: \(scaledWidth)×\(scaledHeight) at \(self.settings.recordingQuality.displayName) quality")
 
         return config
     }
@@ -287,22 +256,17 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - AVAssetWriter Management
 
     private func startNewSegment() async throws {
-        print("📝 DEBUG: startNewSegment() - Creating new segment")
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = "segment_\(timestamp).mp4"
         let bufferDir = bufferManager.getBufferDirectory()
-        print("📝 DEBUG: Buffer directory: \(bufferDir.path)")
         let segmentURL = bufferDir.appendingPathComponent(filename)
-        print("📝 DEBUG: Segment URL: \(segmentURL.path)")
 
         guard let writer = try? AVAssetWriter(outputURL: segmentURL, fileType: .mp4) else {
-            print("❌ DEBUG: Failed to create AVAssetWriter")
+            DevCamLogger.recording.error("Failed to create AVAssetWriter for \(filename)")
             throw RecordingError.writerSetupFailed
         }
-        print("✅ DEBUG: AVAssetWriter created")
 
         // Use stored display dimensions
-        print("📝 DEBUG: Creating video input: \(currentDisplayWidth)x\(currentDisplayHeight)")
         let input = createVideoInput(width: currentDisplayWidth, height: currentDisplayHeight)
 
         guard writer.canAdd(input) else {
@@ -330,7 +294,7 @@ class RecordingManager: NSObject, ObservableObject {
         writer.startWriting()
         writer.startSession(atSourceTime: .zero)
         self.isWriterReady = true
-        print("🎬 DEBUG: AVAssetWriter started immediately for segment \(filename)")
+        DevCamLogger.recording.debug("Started segment: \(filename)")
     }
 
     private func createVideoInput(width: Int, height: Int) -> AVAssetWriterInput {
@@ -370,9 +334,7 @@ class RecordingManager: NSObject, ObservableObject {
     /// **Fix (2026-01-25)**: Removed conditional writer start logic. Writer is now ALWAYS started
     /// upfront in startNewSegment(), eliminating the race condition that caused 0-byte segment files.
     func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) async {
-        guard let writer = currentWriter,
-              let input = currentWriterInput else {
-            print("⚠️ DEBUG: processSampleBuffer called but writer/input is nil")
+        guard let input = currentWriterInput else {
             return
         }
 
@@ -415,19 +377,18 @@ class RecordingManager: NSObject, ObservableObject {
 
         await writer.finishWriting()
 
-        print("✅ DEBUG: Segment finalized: \(segmentURL.lastPathComponent)")
-        print("📝 DEBUG: Final writer.status = \(writer.status.rawValue)")
-        print("📝 DEBUG: writer.error = \(String(describing: writer.error))")
-
         // DIAGNOSTIC (2026-01-25): Detect zero-byte segment files
         // Added as part of Bug #2 fix to verify the race condition is resolved.
         // Before fix: ~5% of segments were 0-byte files due to AVAssetWriter state violation.
         // After fix: Should see 0 zero-byte files in logs.
         if let fileSize = try? FileManager.default.attributesOfItem(atPath: segmentURL.path)[.size] as? UInt64 {
-            print("📝 DEBUG: Segment file size: \(fileSize) bytes")
             if fileSize == 0 {
-                print("❌ ERROR: Zero-byte segment file created! isWriterReady was: \(isWriterReady)")
+                DevCamLogger.recording.error("Zero-byte segment file created: \(segmentURL.lastPathComponent) - isWriterReady was: \(self.isWriterReady)")
+            } else {
+                DevCamLogger.recording.debug("Finalized segment: \(segmentURL.lastPathComponent) (\(fileSize) bytes)")
             }
+        } else {
+            DevCamLogger.recording.debug("Finalized segment: \(segmentURL.lastPathComponent)")
         }
 
         bufferManager.addSegment(url: segmentURL, startTime: startTime, duration: duration)

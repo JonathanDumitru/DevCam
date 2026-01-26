@@ -139,11 +139,9 @@ struct MenuBarView: View {
             Button(action: {
                 Task {
                     do {
-                        print("💾 DEBUG: Attempting to export \(selectedDuration) second clip")
                         try await clipExporter.exportClip(duration: selectedDuration)
-                        print("✅ DEBUG: Export completed successfully")
                     } catch {
-                        print("❌ DEBUG: Export failed: \(error)")
+                        // Error handling is done by ClipExporter
                     }
                 }
             }) {
@@ -231,7 +229,7 @@ struct MenuBarView: View {
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
-        onPreferences: { print("Preferences") },
-        onQuit: { print("Quit") }
+        onPreferences: { },
+        onQuit: { }
     )
 }
