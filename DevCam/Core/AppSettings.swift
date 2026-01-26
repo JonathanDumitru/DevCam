@@ -113,6 +113,14 @@ class AppSettings: ObservableObject {
             }
         }
 
+        // Sync launch at login preference with system state
+        // This handles cases where the user manually changed Login Items in System Settings
+        let systemEnabled = LaunchAtLoginManager.shared.isEnabled
+        if launchAtLogin != systemEnabled {
+            launchAtLogin = systemEnabled
+            DevCamLogger.settings.info("Synced launch at login preference with system state: \(systemEnabled)")
+        }
+
         // Ensure save location exists
         let location = saveLocation
         try? FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
@@ -136,30 +144,31 @@ class AppSettings: ObservableObject {
 
     // MARK: - Launch at Login
 
-    /// Configures launch at login preference.
+    /// Configures launch at login preference using the ServiceManagement framework.
     ///
-    /// **Implementation Status**: Currently only stores the user preference in UserDefaults.
-    /// Full implementation requires creating a LaunchAgent plist at:
-    /// ~/Library/LaunchAgents/com.devcam.launcher.plist
+    /// **Implementation**: Uses `SMAppService.mainApp` (macOS 13+) to register/unregister
+    /// the application as a login item in System Settings > General > Login Items.
     ///
-    /// The plist should specify:
-    /// - Program path to DevCam.app
-    /// - RunAtLoad = true
-    /// - KeepAlive = false (launch once, not a daemon)
+    /// **Atomic Operation**: Both UserDefaults and system registration must succeed.
+    /// If system registration fails, the UserDefaults preference is reverted.
     ///
-    /// Future work: Use SMLoginItemSetEnabled (deprecated) or ServiceManagement framework
-    /// to register/unregister the launch agent automatically.
+    /// **Error Handling**: Logs errors and reverts the preference if registration fails.
+    /// The UI layer should detect the revert to show appropriate feedback.
     func configureLaunchAtLogin(_ enabled: Bool) {
         launchAtLogin = enabled
 
-        // Note: Actual launch agent configuration would require additional setup
-        // For now, this just stores the preference
-        // Full implementation would create/remove a LaunchAgent plist in ~/Library/LaunchAgents/
-
-        if enabled {
-            DevCamLogger.settings.info("Launch at login enabled (not yet implemented)")
-        } else {
-            DevCamLogger.settings.info("Launch at login disabled")
+        do {
+            if enabled {
+                try LaunchAtLoginManager.shared.enable()
+                DevCamLogger.settings.info("Launch at login enabled")
+            } else {
+                try LaunchAtLoginManager.shared.disable()
+                DevCamLogger.settings.info("Launch at login disabled")
+            }
+        } catch {
+            DevCamLogger.settings.error("Failed to configure launch at login: \(error.localizedDescription)")
+            // Revert the preference if system registration failed
+            launchAtLogin = !enabled
         }
     }
 }

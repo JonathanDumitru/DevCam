@@ -1,12 +1,12 @@
 # DevCam - macOS Developer Body Camera
 
-![macOS](https://img.shields.io/badge/macOS-12.3+-blue)
+![macOS](https://img.shields.io/badge/macOS-13.0+-blue)
 ![Swift](https://img.shields.io/badge/Swift-5.9+-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Never lose that perfect demo, bug reproduction, or tutorial moment again.**
 
-DevCam is a native macOS menubar app that continuously records your screen in a rolling 15-minute buffer, letting you save the last 5, 10, or 15 minutes retroactively with a single click. Perfect for developers who need to capture unexpected bugs, spontaneous demos, or teaching moments—without the overhead of manual recording.
+DevCam is a native macOS menubar app that continuously records your screen in a rolling 15-minute buffer, letting you save any portion of the last 15 minutes retroactively with a single click. Perfect for developers who need to capture unexpected bugs, spontaneous demos, or teaching moments—without the overhead of manual recording.
 
 ## Why DevCam?
 
@@ -14,7 +14,7 @@ Ever wish you could hit "save" *after* something interesting happened on your sc
 
 **The Problem:** Bugs appear and disappear. Perfect demos happen when you're not recording. Tutorial-worthy workflows emerge organically, but you didn't hit "record" in time.
 
-**The Solution:** DevCam runs quietly in your menubar, continuously recording your screen at 60fps. When something worth keeping happens, press `⌘⇧5` to save the last 5 minutes, `⌘⇧6` for 10 minutes, or `⌘⇧7` for 15 minutes (shortcuts are handled when DevCam is the active app). DevCam instantly exports that timeframe to a file, then keeps recording.
+**The Solution:** DevCam runs quietly in your menubar, continuously recording your screen at 60fps. When something worth keeping happens, use the menubar Save Clip slider for 1-15 minutes, or press `⌘⇧5`/`⌘⇧6`/`⌘⇧7` for 5/10/15 minutes (shortcuts are handled when DevCam is the active app). DevCam instantly exports that timeframe to a file, then keeps recording.
 
 **The Guarantee:** Everything stays on your Mac. Zero network connections. Zero telemetry. Zero cloud storage. Your screen recordings never leave your device.
 
@@ -22,20 +22,21 @@ Ever wish you could hit "save" *after* something interesting happened on your sc
 
 - ✅ **Continuous 60fps screen recording** with automatic buffer management
 - ✅ **Rolling 15-minute buffer** that self-manages disk space and memory
-- ✅ **One-click retroactive save** via menubar or keyboard shortcuts (`⌘⇧5`, `⌘⇧6`, `⌘⇧7`)
+- ✅ **Retroactive save** for 1-15 minutes via menubar; shortcuts for 5/10/15 when active
 - ✅ **Native macOS menubar app** built with Swift and SwiftUI
 - ✅ **Preferences window** with clips browser and settings management
+- ✅ **Recording quality selection** (Low/Medium/High)
 - ✅ **System integration** handles sleep/wake events
 - ✅ **Real-time export progress** with notifications on completion
 - ✅ **100% local and private** - no network connections, no telemetry, no cloud
-- ✅ **Minimal resource usage** - typically ~5% CPU and ~200MB RAM
+- ✅ **Minimal resource usage** - typically ~5% CPU and ~100-200MB RAM
 - ✅ **Zero external dependencies** - pure Swift using Apple frameworks
 
 ## Quick Start
 
 ### System Requirements
 
-- **macOS 12.3 or later** (requires ScreenCaptureKit framework)
+- **macOS 13.0 or later (Ventura+)** (requires ScreenCaptureKit and ServiceManagement frameworks)
 - **Screen Recording permission** (granted on first launch)
 - **2+ GB free disk space** for buffer and saved clips
 
@@ -68,7 +69,8 @@ Shortcuts are handled when DevCam is the active app.
 
 **Menubar Menu:**
 - Click the DevCam menubar icon
-- Choose "Save Last 5 Minutes", "Save Last 10 Minutes", or "Save Last 15 Minutes"
+- Use the Save Clip slider to choose 1-15 minutes, then click Save Clip
+- Optional: click Advanced... for a custom start/end range
 - Clips export with progress tracking and completion notifications
 
 ### Finding Your Clips
@@ -105,7 +107,7 @@ DevCam handles macOS system events:
 
 Open Preferences from the menubar menu:
 
-- **General Tab:** Configure save location, launch at login (preference only), notification preferences
+- **General Tab:** Configure save location, recording quality, launch at login (preference only), notification preferences
 - **Clips Tab:** Browse, preview, and manage saved clips
 - **Privacy Tab:** Screen recording permission status and privacy details
 
@@ -157,6 +159,12 @@ DevCam has **zero external dependencies**. It uses only Apple-provided framework
 
 ### For Users
 
+- [**Beta Testing Guide**](docs/BETA_TESTING.md) - Beta scope, known limitations, and reporting
+- [**Known Issues**](docs/KNOWN_ISSUES.md) - Active issues and limitations
+- [**Compatibility**](docs/COMPATIBILITY.md) - Supported macOS versions and hardware notes
+- [**Diagnostics**](docs/DIAGNOSTICS.md) - Log collection and troubleshooting data
+- [**Feedback Template**](docs/FEEDBACK_TEMPLATE.md) - Copy/paste report format
+- [**Beta Release Notes**](docs/BETA_RELEASE_NOTES.md) - Current beta changes and focus areas
 - [**User Guide**](docs/USER_GUIDE.md) - Complete usage instructions and workflows
 - [**Keyboard Shortcuts**](docs/SHORTCUTS.md) - Quick reference for all shortcuts
 - [**Settings Reference**](docs/SETTINGS.md) - Configuration options explained
@@ -168,6 +176,9 @@ DevCam has **zero external dependencies**. It uses only Apple-provided framework
 
 - [**Building from Source**](docs/BUILDING.md) - Setup and compilation instructions
 - [**Architecture Guide**](docs/ARCHITECTURE.md) - System design and implementation deep dive
+- [**Code Map**](docs/CODE_MAP.md) - File-to-responsibility index
+- [**Flow Guides**](docs/flows/recording-lifecycle.md) - Recording lifecycle and [save clip](docs/flows/save-clip.md) walkthroughs
+- [**Decision Records**](docs/decisions/0001-segmented-buffer.md) - Segmented buffer and [no audio](docs/decisions/0002-no-audio.md) decisions
 - [**ScreenCaptureKit Integration**](docs/SCREENCAPTUREKIT.md) - Technical details of screen capture
 - [**Contributing**](docs/CONTRIBUTING.md) - Development workflow and guidelines
 - [**Roadmap**](docs/ROADMAP.md) - Planned features and future direction

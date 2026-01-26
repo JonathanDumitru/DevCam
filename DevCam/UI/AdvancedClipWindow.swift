@@ -51,7 +51,7 @@ struct AdvancedClipWindow: View {
 
                 HStack {
                     Slider(value: $startOffset, in: 0...maxDuration, step: 1)
-                        .onChange(of: startOffset) { _, newValue in
+                        .onChange(of: startOffset) { newValue in
                             // Ensure end is always after start
                             if endOffset <= newValue {
                                 endOffset = min(newValue + 60, maxDuration)
@@ -73,7 +73,7 @@ struct AdvancedClipWindow: View {
 
                 HStack {
                     Slider(value: $endOffset, in: 0...maxDuration, step: 1)
-                        .onChange(of: endOffset) { _, newValue in
+                        .onChange(of: endOffset) { newValue in
                             // Ensure start is always before end
                             if startOffset >= newValue {
                                 startOffset = max(newValue - 60, 0)

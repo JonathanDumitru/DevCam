@@ -10,6 +10,8 @@ import SwiftUI
 struct GeneralTab: View {
     @ObservedObject var settings: AppSettings
     @State private var initialQuality: RecordingQuality?
+    @State private var launchAtLoginError: String?
+    @State private var showingAlert = false
 
     var body: some View {
         Form {
@@ -72,8 +74,19 @@ struct GeneralTab: View {
                 }
 
                 Toggle("Launch at Login", isOn: $settings.launchAtLogin)
-                    .onChange(of: settings.launchAtLogin) { _, newValue in
+                    .onChange(of: settings.launchAtLogin) { newValue in
                         settings.configureLaunchAtLogin(newValue)
+
+                        // Check if it actually changed (AppSettings reverts on error)
+                        if settings.launchAtLogin != newValue {
+                            launchAtLoginError = "Failed to configure launch at login. Please check System Settings > General > Login Items."
+                            showingAlert = true
+                        }
+                    }
+                    .alert("Launch at Login Error", isPresented: $showingAlert) {
+                        Button("OK", role: .cancel) { }
+                    } message: {
+                        Text(launchAtLoginError ?? "Unknown error")
                     }
 
                 Toggle("Show Notifications", isOn: $settings.showNotifications)

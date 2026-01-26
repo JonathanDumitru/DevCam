@@ -26,9 +26,11 @@ final class RecordingManagerTests: XCTestCase {
         // Initialize managers
         bufferManager = BufferManager(bufferDirectory: tempDirectory)
         permissionManager = PermissionManager()
+        let settings = AppSettings()
         recordingManager = RecordingManager(
             bufferManager: bufferManager,
-            permissionManager: permissionManager
+            permissionManager: permissionManager,
+            settings: settings
         )
     }
 

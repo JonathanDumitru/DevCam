@@ -3,7 +3,7 @@
 This document provides an in-depth look at DevCam's architecture, component
 interactions, and design decisions.
 
-Status: RecordingManager, BufferManager, ClipExporter, AppSettings, and the menubar/preferences UI are implemented. Some settings and shortcuts are not yet wired.
+Status: RecordingManager, BufferManager, ClipExporter, AppSettings, and the menubar/preferences UI are implemented. Recording quality selection is wired; global shortcuts and login item setup are not.
 
 ## System Overview
 
@@ -155,8 +155,38 @@ saveLocation: URL
 launchAtLogin: Bool
 showNotifications: Bool
 bufferDurationSeconds: Int
+recordingQuality: RecordingQuality
 shortcuts: [ShortcutAction: KeyboardShortcutConfig]
 ```
+
+### 5. LaunchAtLoginManager
+
+Purpose: Manages launch at login functionality using macOS ServiceManagement framework.
+
+Implementation:
+- Uses `SMAppService.mainApp` (macOS 13.0+) for login item registration
+- Eliminates need for separate helper app or launch agent
+- Singleton pattern for app-wide access
+- Thread-safe operations
+
+Key methods:
+```swift
+func enable() throws  // Register app as login item
+func disable() throws // Unregister app from login items
+var isEnabled: Bool   // Query current system state
+```
+
+Design rationale:
+- **Modern API**: Uses ServiceManagement instead of deprecated LSSharedFileList
+- **No helper app**: SMAppService.mainApp registers the main bundle directly
+- **System integration**: Appears in System Settings > General > Login Items
+- **State sync**: AppSettings checks isEnabled on init to handle manual changes
+- **Atomic operations**: Both UserDefaults and system registration succeed or revert together
+
+Error handling:
+- Throws on registration/unregistration failures
+- AppSettings reverts preference on error
+- UI displays alert with guidance to System Settings
 
 ## Data Flow Examples
 
