@@ -114,10 +114,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // CRITICAL FIX: Always recreate popover with fresh manager references
-        // This prevents stale @ObservedObject references from causing crashes
-        menuBarPopover?.close()
-        menuBarPopover = nil
+        // OPTIMIZATION: Reuse existing popover instead of recreating
+        // This reduces energy spikes by avoiding NSPopover allocation and NSHostingController setup
+        if let existingPopover = menuBarPopover {
+            existingPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            return
+        }
 
         // Verify managers exist
         guard let recordingManager = recordingManager,
@@ -126,6 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // First time opening - create the popover
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 250, height: 300)
         popover.behavior = .transient
@@ -221,11 +224,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // CRITICAL FIX: Always recreate window with fresh manager references
-        // This prevents stale @ObservedObject references from causing crashes
-        preferencesWindow?.close()
-        preferencesWindow = nil
+        // OPTIMIZATION: Reuse existing window instead of recreating
+        // This reduces energy spikes by avoiding NSWindow allocation and NSHostingView setup
+        if let existingWindow = preferencesWindow {
+            // Window already exists - just show it
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
 
+        // First time opening - create the window
         let prefsView = PreferencesWindow(
             settings: settings,
             permissionManager: permissionManager,

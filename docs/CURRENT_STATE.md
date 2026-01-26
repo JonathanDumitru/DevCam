@@ -7,7 +7,7 @@
 - Launch at Login fully functional using ServiceManagement framework (macOS 13.0+).
 - Keyboard shortcuts (⌘⌥5/6/7) available for quick clip saving.
 - Save location and notifications apply immediately without restart.
-- Performance remains low during recording; brief energy spikes occur when opening Preferences or revealing files.
+- Performance remains low during recording; brief energy spikes occur when revealing files (expected macOS behavior).
 
 ## Observed Behavior
 - Recording starts automatically and maintains a rolling 15-minute buffer.
@@ -27,7 +27,7 @@
 - CPU averages ~4% (peaks ~6%).
 - Memory stays under ~100 MB.
 - Disk activity remains under ~1 MB during steady-state observation.
-- Energy impact is low on average, with spikes when opening Preferences or revealing files.
+- Energy impact is low on average; brief spike when revealing files (Finder activation).
 
 ## Minimum Performance Target (M1)
 - CPU average <= 5% during steady recording; peak <= 8% during UI actions.
@@ -60,6 +60,13 @@
 - **Impact**: 145 print() statements cluttering console during normal operation
 - **Fix**: Removed all print() statements and replaced with proper DevCamLogger calls where appropriate
 - **Files Modified**: RecordingManager.swift (49), DevCamApp.swift (69), PermissionManager.swift (9), BufferManager.swift (6), AppSettings.swift (4), MenuBarView.swift (5), AdvancedClipWindow.swift (3)
+
+### Preferences Window Energy Spikes
+- **Status**: RESOLVED
+- **Impact**: Energy spike visible in Activity Monitor when opening Preferences window
+- **Root Cause**: Window and popover were destroyed and recreated on every open, causing unnecessary NSWindow/NSHostingView allocation
+- **Fix**: Reuse existing window/popover instead of recreating; show with `makeKeyAndOrderFront`
+- **Files Modified**: `DevCamApp.swift:showPreferences(), statusItemClicked()`
 
 ## Recently Resolved Critical Bugs (2026-01-25)
 ### Bug #1: Menubar Icon Not Visible
