@@ -14,7 +14,7 @@ Ever wish you could hit "save" *after* something interesting happened on your sc
 
 **The Problem:** Bugs appear and disappear. Perfect demos happen when you're not recording. Tutorial-worthy workflows emerge organically, but you didn't hit "record" in time.
 
-**The Solution:** DevCam runs quietly in your menubar, continuously recording your screen at 60fps. When something worth keeping happens, use the menubar Save Clip slider for 1-15 minutes, or press `⌘⇧5`/`⌘⇧6`/`⌘⇧7` for 5/10/15 minutes (shortcuts are handled when DevCam is the active app). DevCam instantly exports that timeframe to a file, then keeps recording.
+**The Solution:** DevCam runs quietly in your menubar, continuously recording your screen at 60fps. When something worth keeping happens, use the menubar Save Clip slider for 1-15 minutes, or press `⌘⇧5`/`⌘⇧6`/`⌘⇧7` for 5/10/15 minutes (shortcuts work system-wide). DevCam instantly exports that timeframe to a file, then keeps recording.
 
 **The Guarantee:** Everything stays on your Mac. Zero network connections. Zero telemetry. Zero cloud storage. Your screen recordings never leave your device.
 
@@ -61,11 +61,11 @@ Build in Xcode (`⌘B`) or run directly (`⌘R`). See [Building from Source](#bu
 
 ### Saving Clips
 
-**Keyboard Shortcuts (default):**
+**Keyboard Shortcuts (system-wide):**
 - `⌘⇧5` - Save last 5 minutes
 - `⌘⇧6` - Save last 10 minutes
 - `⌘⇧7` - Save last 15 minutes
-Shortcuts are handled when DevCam is the active app.
+Shortcuts work from any application.
 
 **Menubar Menu:**
 - Click the DevCam menubar icon

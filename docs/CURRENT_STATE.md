@@ -1,12 +1,13 @@
-# Current State Snapshot (Updated 2026-01-26, v1.2.1)
+# Current State Snapshot (Updated 2026-01-26, v1.2.2)
 
 ## Summary
 - Continuous recording is stable with a 15-minute rolling buffer and retroactive export.
 - Menubar save workflow supports 1-15 minute exports (1-minute steps) plus advanced custom ranges.
 - Recording quality selection is implemented (Low/Medium/High); changes apply after restart.
 - Launch at Login fully functional using ServiceManagement framework (macOS 13.0+).
+- Keyboard shortcuts (⌘⇧5/6/7) now work system-wide, not just when app is active.
+- Save location and notifications apply immediately without restart.
 - Performance remains low during recording; brief energy spikes occur when opening Preferences or revealing files.
-- Console log spam observed: "Sample buffer has no image buffer" (mitigation in progress).
 
 ## Observed Behavior
 - Recording starts automatically and maintains a rolling 15-minute buffer.

@@ -11,11 +11,11 @@ Last updated: 2026-01-26 (v1.2.1 beta)
 - No audio recording.
 - Buffer length is fixed at 15 minutes.
 - No forward-recording mode or clips longer than 15 minutes.
-- Shortcuts are app-local (not global).
 - Recording quality changes apply after restart (requires stream reconfiguration).
 - No display selection; DevCam records the primary display.
 
 ## Fixed Recently
+- Keyboard shortcuts app-local only (fixed 2026-01-26) - Now work system-wide.
 - Console log spam from metadata frames (fixed 2026-01-26) - Added rate-limited logging.
 - Save location and notifications requiring restart (fixed 2026-01-26) - Now apply immediately.
 - Launch at login not functional (fixed 2026-01-26) - Now uses ServiceManagement framework.
