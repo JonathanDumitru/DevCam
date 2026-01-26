@@ -1,15 +1,17 @@
-# Current State Snapshot (2026-01-23)
+# Current State Snapshot (Updated 2026-01-26, v1.2)
 
 ## Summary
-- Initial durability test is successful; 5/10/15 minute retroactive clips record at full resolution.
-- Buffer is fixed at 15 minutes; no forward-recording or longer-than-15 clip mode in the UI yet.
+- Continuous recording is stable with a 15-minute rolling buffer and retroactive export.
+- Menubar save workflow supports 1-15 minute exports (1-minute steps) plus advanced custom ranges.
+- Recording quality selection is implemented (Low/Medium/High); changes apply after restart.
 - Performance remains low during recording; brief energy spikes occur when opening Preferences or revealing files.
 - Console log spam observed: "Sample buffer has no image buffer" (mitigation in progress).
 
 ## Observed Behavior
 - Recording starts automatically and maintains a rolling 15-minute buffer.
 - Save actions are enabled once buffer time accumulates.
-- Menubar reports recording state and export progress.
+- Menubar reports recording state, buffer duration, and export progress.
+- Keyboard shortcuts save fixed 5/10/15 minute clips when DevCam is active.
 
 ## Evidence
 - Recent test notes provided via console logs and Activity Monitor during the 15-minute run.
@@ -32,8 +34,8 @@
 - Disk activity minimal during steady recording; temporary spikes during export/buffer rotation.
 
 ## In Progress
-- Adding resolution selection in Preferences (720p through native).
 - Investigating and reducing "Sample buffer has no image buffer" log spam.
+- Evaluating performance impacts across Low/Medium/High recording quality.
 
 ## Prior Incidents (Resolved)
 - AVAssetWriterInput output settings crash fixed by nesting compression properties.
@@ -43,6 +45,23 @@
 - `incident-logs/DevCam-2026-01-23-102332.txt`
 - `incident-logs/DevCam-2026-01-23-104322.txt`
 - `incident-logs/DevCam-2026-01-23-104842.txt`
+
+## Recently Resolved Critical Bugs (2026-01-25)
+### Bug #1: Menubar Icon Not Visible
+- **Status**: RESOLVED
+- **Impact**: App appeared non-functional - users couldn't access menubar controls
+- **Root Cause**: Configuration conflict between `LSUIElement=true` (Info.plist) and `NSApp.setActivationPolicy(.accessory)` (programmatic) caused macOS to hide ALL UI including menubar icon
+- **Fix**: Removed redundant programmatic activation policy call in `DevCamApp.swift:72-77`
+- **Verification**: Menubar icon now visible immediately on launch, menu functional, no Dock icon present
+
+### Bug #2: Intermittent Zero-Byte Video Segments
+- **Status**: RESOLVED
+- **Impact**: ~5% of video segments (4 out of 77 observed) were 0-byte empty files, causing gaps in recordings
+- **Root Cause**: AVAssetWriter race condition where `finishWriting()` called before `startWriting()` when ScreenCaptureKit delivered only metadata frames (no pixel buffers) in first 60 seconds of segment
+- **Fix**: Start AVAssetWriter immediately in `startNewSegment()` with `atSourceTime: .zero`, eliminating conditional start logic in `processSampleBuffer()`
+- **Verification**: 19 consecutive segments created with 0% failure rate, all segments 69MB-120MB (valid sizes), diagnostic logging added to detect future occurrences
+- **Files Modified**: `RecordingManager.swift:313-328, 357-368, 404-414`
+- **Performance**: No impact - CPU 10.1%, Memory 81.2 MB during 8+ minute test run
 
 ## Open Questions / Missing Info
 - macOS version, hardware model (Intel/Apple Silicon), and display setup.

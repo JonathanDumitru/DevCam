@@ -16,4 +16,5 @@ Not supported in current builds.
 
 ## Tips
 - Use the menubar menu if you are not actively focused in DevCam.
+- The menubar Save Clip slider supports 1-15 minute exports in 1-minute steps.
 - If a shortcut does nothing, click the menubar icon and try again.

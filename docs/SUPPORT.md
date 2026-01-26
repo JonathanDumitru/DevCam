@@ -1,8 +1,8 @@
 # DevCam Support
 
 ## Getting Help
-- Search existing issues on GitHub (coming soon)
-- Open a new issue with details (coming soon)
+- Email: jonathan@hinesdumitru.online (primary beta channel)
+- If the GitHub repository is public, search existing issues and open a new one
 
 ## What to Include
 - macOS version
@@ -10,12 +10,13 @@
 - Steps to reproduce
 - Expected vs actual behavior
 - Logs from Console.app (filter for "DevCam") or `log show` output
+- Use `docs/FEEDBACK_TEMPLATE.md` and `docs/DIAGNOSTICS.md` for structure and log collection
 
 ## Response Expectations
 Community-supported; responses may take a few days.
 
 ## Feature Requests
-Open a GitHub issue with the enhancement label (coming soon).
+Email a brief request or open a GitHub issue with the enhancement label when available.
 
 ## Triage Priorities
 - Critical: data loss, recording failures, export corruption

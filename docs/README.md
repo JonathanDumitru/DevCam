@@ -9,6 +9,12 @@ The documentation is currently a workflow test using multiple tools. See WORKFLO
 
 ### For Users
 - User Guide: USER_GUIDE.md
+- Beta Testing Guide: BETA_TESTING.md
+- Known Issues: KNOWN_ISSUES.md
+- Compatibility: COMPATIBILITY.md
+- Diagnostics: DIAGNOSTICS.md
+- Feedback Template: FEEDBACK_TEMPLATE.md
+- Beta Release Notes: BETA_RELEASE_NOTES.md
 - Shortcuts Reference: SHORTCUTS.md
 - Settings Reference: SETTINGS.md
 - Troubleshooting: TROUBLESHOOTING.md
@@ -16,7 +22,10 @@ The documentation is currently a workflow test using multiple tools. See WORKFLO
 - Privacy Policy: PRIVACY.md
 
 ### For Developers
+- Code Map: CODE_MAP.md
 - Architecture Guide: ARCHITECTURE.md
+- Flow Guides: flows/recording-lifecycle.md, flows/save-clip.md
+- Decision Records: decisions/0001-segmented-buffer.md, decisions/0002-no-audio.md
 - ScreenCaptureKit Integration: SCREENCAPTUREKIT.md
 - Building from Source: BUILDING.md
 - Contributing: CONTRIBUTING.md

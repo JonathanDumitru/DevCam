@@ -1,6 +1,6 @@
 # DevCam User Guide
 
-Status: Menubar UI and export workflow are implemented. Current builds may fail to start recording due to a known AVAssetWriterInput settings issue; see `docs/TROUBLESHOOTING.md` and `docs/CURRENT_STATE.md`.
+Status: Menubar UI, continuous recording, and export workflow are implemented. Recording quality selection is available; some settings apply after restart.
 
 ## Quick Start
 1. Launch DevCam from Applications.
@@ -15,9 +15,8 @@ DevCam runs in the macOS menubar. The status area shows:
 - Export progress when saving a clip
 
 Menu actions:
-- Save Last 5 Minutes
-- Save Last 10 Minutes
-- Save Last 15 Minutes
+- Save Clip (duration slider + save button)
+- Advanced... (custom start/end selection)
 - Preferences
 - Quit DevCam
 
@@ -30,6 +29,10 @@ Export behavior:
 - Default filenames: DevCam_YYYY-MM-DD_HH-MM-SS.mp4
 - Clips are saved to the selected folder
 - Export progress is shown in the menubar
+
+Menubar save options:
+- Save Clip slider supports 1-15 minute exports in 1-minute steps.
+- Advanced... lets you set a custom start/end range within the buffer.
 
 Notes:
 - Save actions are disabled until the buffer has content.
@@ -45,10 +48,11 @@ Shortcuts are app-local and not customizable in current builds.
 
 ## Preferences
 Preferences are divided into tabs:
-- General: save location, launch at login (preference only), notifications
+- General: save location, recording quality, launch at login (preference only), notifications
 - Clips: recent exports and quick actions
 - Privacy: local-only data handling information and permission status
 
+Recording quality, save location, and notification changes apply after restart.
 See SETTINGS.md for details.
 
 ## Storage and Buffer
@@ -77,9 +81,10 @@ log show --last 1h --predicate 'process == "DevCam"' --style compact
 ## Known Limitations
 - Global hotkeys are not supported; shortcuts only work when DevCam is active.
 - Launch at login is stored as a preference only.
-- Save location and notification changes take effect on next launch.
+- Save location, notification, and quality changes take effect on next launch.
 - No forward-recording mode for longer-than-15-minute clips.
 - No audio recording.
+- No display selection; DevCam records the primary display.
 
 ## Uninstall
 To remove DevCam completely:

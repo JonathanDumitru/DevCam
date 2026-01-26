@@ -69,10 +69,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Hide dock icon - this is a menubar-only app
-        print("🚀 DEBUG: Setting activation policy to .accessory")
-        NSApp.setActivationPolicy(.accessory)
-        print("✅ DEBUG: Activation policy set")
+        // CRITICAL FIX (2026-01-25): Menubar icon visibility
+        // Hide dock icon - handled by LSUIElement=true in Info.plist
+        // IMPORTANT: Do NOT call NSApp.setActivationPolicy(.accessory) here!
+        // Using BOTH LSUIElement=true AND setActivationPolicy(.accessory) causes
+        // macOS to interpret the app as having NO UI at all, hiding the menubar icon.
+        // LSUIElement=true alone is the correct approach for menubar-only apps.
+        print("🚀 DEBUG: LSUIElement=true in Info.plist handles dock icon hiding")
 
         // Setup UI
         print("🚀 DEBUG: About to call setupStatusItem()")

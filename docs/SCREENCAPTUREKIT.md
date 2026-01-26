@@ -3,7 +3,7 @@
 This document explains how DevCam integrates with ScreenCaptureKit for high
 performance screen recording on macOS 12.3+.
 
-Status: RecordingManager, VideoStreamOutput, and ClipExporter are implemented. Menubar and Preferences UI are wired; some settings remain stubs.
+Status: RecordingManager, VideoStreamOutput, and ClipExporter are implemented. Menubar and Preferences UI are wired; recording quality scaling is active and other settings remain stubs.
 
 ## Why ScreenCaptureKit
 
@@ -95,6 +95,9 @@ let filter = SCContentFilter(desktopIndependentWindow: targetWindow)
 ```
 
 DevCam uses the full display filter by default.
+
+Recording quality is applied by scaling the chosen display resolution before
+assigning width/height to the stream configuration.
 
 ## Creating and Starting the Stream
 

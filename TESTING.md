@@ -17,7 +17,7 @@ Expected:
 - ✅ Menubar icon visible
 - ✅ Status shows "Recording" or "Paused"
 - ✅ Buffer duration displays (0:00 / 15:00)
-- ✅ Three save buttons visible
+- ✅ Save Clip slider and Save/Advanced buttons visible
 - ✅ Preferences and Quit options
 
 ---
@@ -39,13 +39,14 @@ Expected:
 ---
 
 ## Test 3: Save Clips (Menu)
-**Goal**: Test clip export via menu buttons
+**Goal**: Test clip export via the menubar slider and Advanced flow
 
 Steps:
 1. Wait for at least 1 minute of buffer
-2. Click "Save Last 5 Minutes" button
+2. Set the Save Clip slider to 1-5 minutes and click "Save Clip"
 3. Wait for export to complete
 4. Check save location for exported file
+5. Click "Advanced...", set a custom start/end range, and export
 
 Expected:
 - ✅ Export progress bar appears
@@ -53,17 +54,19 @@ Expected:
 - ✅ Notification appears (if enabled)
 - ✅ File exists at ~/Movies/DevCam/DevCam_YYYY-MM-DD_HH-MM-SS.mp4
 - ✅ File can be opened in QuickTime Player
+- ✅ Advanced export completes successfully
 
 ---
 
 ## Test 4: Keyboard Shortcuts
-**Goal**: Test global keyboard shortcuts
+**Goal**: Test app-local keyboard shortcuts
 
 Steps:
-1. With DevCam running, press Cmd+Shift+5
-2. Wait for export
-3. Try Cmd+Shift+6 and Cmd+Shift+7
-4. Check save location for files
+1. Click the menubar icon to focus DevCam
+2. Press Cmd+Shift+5
+3. Wait for export
+4. Try Cmd+Shift+6 and Cmd+Shift+7
+5. Check save location for files
 
 Expected:
 - ✅ Cmd+Shift+5 saves 5-minute clip
@@ -99,6 +102,8 @@ Steps:
 3. Select a different folder
 4. Toggle "Launch at Login"
 5. Toggle "Show Notifications"
+6. Change Recording Quality
+7. Quit and relaunch DevCam
 
 Expected:
 - ✅ Save location displays current path
@@ -106,6 +111,7 @@ Expected:
 - ✅ New location is saved
 - ✅ Toggles work and persist
 - ✅ About section shows version
+- ✅ Recording quality persists after relaunch
 
 ---
 
