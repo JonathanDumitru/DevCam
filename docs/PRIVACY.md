@@ -1,6 +1,6 @@
 # DevCam Privacy Policy
 
-Last updated: 2026-01-22
+Last updated: 2026-01-26
 
 ## Our Privacy Commitment
 DevCam is designed with privacy as a core principle. Your recordings are yours
@@ -67,22 +67,20 @@ Why it is needed:
 
 How it is used:
 - You select a folder using the macOS file picker
-- DevCam is not sandboxed, so macOS does not enforce folder-only access
-- The app is designed to write recordings only to the folder you choose
+- DevCam can only write to the folder you explicitly choose
+- This permission is remembered so you don't have to select the folder each time
 
 ## What DevCam Does Not Do
 
 ### No Network Access
 DevCam does not include network features and does not send data to the internet.
-Because the app is not sandboxed, macOS does not enforce network restrictions;
-this is a design choice rather than an OS-level constraint.
+The app is sandboxed and does not request network entitlements, which means macOS
+enforces that DevCam cannot make network connections.
 
-You can verify this:
+You can verify this by checking the app's entitlements:
 ```
 codesign -d --entitlements - /Applications/DevCam.app
 ```
-Default release install path: /Applications/DevCam.app
-Note: network entitlements only apply to sandboxed apps.
 
 ### No Third-Party Services
 DevCam uses only Apple frameworks:
@@ -121,18 +119,20 @@ log show --last 1h --predicate 'process == "DevCam"' --style compact
 
 ## macOS Privacy Protections
 
-### App Sandbox (Not Enabled)
-- DevCam does not use the App Sandbox
-- File access is governed by standard macOS permissions for your user account
+### App Sandbox
+- DevCam uses the macOS App Sandbox
+- File access is restricted to your app container and folders you explicitly choose
+- Network access is not permitted
 
 ### Permission System
 - Screen recording permission required
 - User can revoke any time
 - macOS shows a system indicator when recording
 
-### Notarization
-- Apple scans the app for malware
-- Ensures distributed apps are signed and unmodified
+### App Store Review
+- Apple reviews the app for policy compliance
+- App is signed and notarized
+- Updates are delivered through the App Store
 
 ## Data Retention
 
