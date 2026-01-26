@@ -33,11 +33,17 @@ class ClipExporter: NSObject, ObservableObject {
     // MARK: - Dependencies
 
     private let bufferManager: BufferManager
+    private let settings: AppSettings
 
     // MARK: - Configuration
 
-    private var saveLocation: URL
-    private let showNotifications: Bool
+    private var saveLocation: URL {
+        settings.saveLocation
+    }
+
+    private var showNotifications: Bool {
+        settings.showNotifications
+    }
     private let maxRecentClips: Int = 20
     private let recentClipsKey = "recentClips"
 
@@ -57,25 +63,19 @@ class ClipExporter: NSObject, ObservableObject {
 
     // MARK: - Initialization
 
-    init(bufferManager: BufferManager, saveLocation: URL? = nil, showNotifications: Bool = true) {
+    init(bufferManager: BufferManager, settings: AppSettings) {
         self.bufferManager = bufferManager
-        self.showNotifications = showNotifications
-
-        if let location = saveLocation {
-            self.saveLocation = location
-        } else {
-            let moviesDir = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first!
-            self.saveLocation = moviesDir.appendingPathComponent("DevCam")
-        }
+        self.settings = settings
 
         super.init()
 
-        try? FileManager.default.createDirectory(at: self.saveLocation, withIntermediateDirectories: true)
+        // Ensure save location directory exists
+        try? FileManager.default.createDirectory(at: settings.saveLocation, withIntermediateDirectories: true)
 
         // Load persisted recent clips
         loadRecentClips()
 
-        if showNotifications && !isTestMode {
+        if settings.showNotifications && !isTestMode {
             requestNotificationPermission()
         }
     }
@@ -107,10 +107,8 @@ class ClipExporter: NSObject, ObservableObject {
         isExporting = false
     }
 
-    func updateSaveLocation(_ newLocation: URL) {
-        saveLocation = newLocation
-        try? FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
-    }
+    // REMOVED: updateSaveLocation() - saveLocation now automatically reflects settings.saveLocation
+    // The save location directory is ensured to exist during export operations
 
     func deleteClip(_ clip: ClipInfo) {
         try? FileManager.default.removeItem(at: clip.fileURL)
@@ -126,6 +124,9 @@ class ClipExporter: NSObject, ObservableObject {
     // MARK: - Export Implementation
 
     private func performExport(duration: TimeInterval) async throws {
+        // Ensure save location directory exists (handles dynamic settings changes)
+        try? FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+
         let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
         guard !segments.isEmpty else {
@@ -301,6 +302,9 @@ class ClipExporter: NSObject, ObservableObject {
     // MARK: - Test Mode
 
     private func exportTestClip(duration: TimeInterval) async throws {
+        // Ensure save location directory exists (handles dynamic settings changes)
+        try? FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+
         let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
         guard !segments.isEmpty else {

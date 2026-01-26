@@ -12,6 +12,7 @@ import XCTest
 final class ClipExporterTests: XCTestCase {
     var bufferManager: BufferManager!
     var clipExporter: ClipExporter!
+    var settings: AppSettings!
     var tempDirectory: URL!
     var saveDirectory: URL!
 
@@ -30,10 +31,12 @@ final class ClipExporterTests: XCTestCase {
 
         // Initialize managers
         bufferManager = BufferManager(bufferDirectory: tempDirectory)
+        settings = AppSettings()
+        // Override save location for tests
+        settings.saveLocation = saveDirectory
         clipExporter = ClipExporter(
             bufferManager: bufferManager,
-            saveLocation: saveDirectory,
-            showNotifications: false // Disable for tests
+            settings: settings
         )
     }
 
@@ -235,20 +238,21 @@ final class ClipExporterTests: XCTestCase {
     func testUpdateSaveLocation() async throws {
         let newLocation = saveDirectory.appendingPathComponent("new-location")
 
-        // Update location
-        clipExporter.updateSaveLocation(newLocation)
+        // Update location via settings (now applies immediately)
+        // Note: Directory creation now happens automatically during export
+        settings.saveLocation = newLocation
 
-        // Verify directory created
-        var isDirectory: ObjCBool = false
-        XCTAssertTrue(FileManager.default.fileExists(atPath: newLocation.path, isDirectory: &isDirectory))
-        XCTAssertTrue(isDirectory.boolValue)
-
-        // Export should use new location
+        // Export should use new location immediately and create directory
         try await createTestSegments(count: 1)
         try await clipExporter.exportClip(duration: 60)
 
         let clip = try XCTUnwrap(clipExporter.recentClips.first)
         XCTAssertTrue(clip.fileURL.path.contains("new-location"), "Clip should be in new location")
+
+        // Verify directory was created during export
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newLocation.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue, "Save location directory should exist")
     }
 
     // MARK: - Duration Tests

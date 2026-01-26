@@ -144,10 +144,10 @@ struct ClipsTab: View {
 
 #Preview {
     let bufferManager = BufferManager()
+    let settings = AppSettings()
     let clipExporter = ClipExporter(
         bufferManager: bufferManager,
-        saveLocation: nil,
-        showNotifications: false
+        settings: settings
     )
 
     return ClipsTab(clipExporter: clipExporter)

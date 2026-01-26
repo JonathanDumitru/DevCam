@@ -74,6 +74,12 @@ class RecordingManager: NSObject, ObservableObject {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
+    // MARK: - Logging Rate Limiting
+
+    private var lastMetadataFrameWarning: Date = .distantPast
+    private var lastDroppedFrameWarning: Date = .distantPast
+    private let logWarningInterval: TimeInterval = 60.0 // Log warnings once per minute
+
     // MARK: - Initialization
 
     init(bufferManager: BufferManager, permissionManager: PermissionManager, settings: AppSettings) {
@@ -374,16 +380,24 @@ class RecordingManager: NSObject, ObservableObject {
         // CRITICAL: ScreenCaptureKit occasionally sends metadata frames without pixel data
         // (cursor updates, window notifications, etc.). Skip these silently.
         guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else {
-            print("⚠️ DEBUG: Skipping metadata frame (no pixel buffer)")
+            // Rate-limited logging: only log once per minute to avoid spam
+            let now = Date()
+            if now.timeIntervalSince(lastMetadataFrameWarning) > logWarningInterval {
+                DevCamLogger.recording.debug("Skipping metadata frames (no pixel buffer) - normal behavior")
+                lastMetadataFrameWarning = now
+            }
             return
         }
-
-        print("📹 DEBUG: Processing video frame")
 
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
         } else {
-            print("⚠️ DEBUG: Input not ready for more data, dropping frame")
+            // Rate-limited logging: only log once per minute to avoid spam
+            let now = Date()
+            if now.timeIntervalSince(lastDroppedFrameWarning) > logWarningInterval {
+                DevCamLogger.recording.warning("Dropping frames - input not ready for data")
+                lastDroppedFrameWarning = now
+            }
         }
     }
 

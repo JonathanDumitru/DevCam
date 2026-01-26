@@ -271,8 +271,7 @@ struct AdvancedClipWindow: View {
     )
     let clipExporter = ClipExporter(
         bufferManager: bufferManager,
-        saveLocation: nil,
-        showNotifications: false
+        settings: settings
     )
 
     AdvancedClipWindow(

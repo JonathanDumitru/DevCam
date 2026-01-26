@@ -1,9 +1,10 @@
-# Current State Snapshot (Updated 2026-01-26, v1.2)
+# Current State Snapshot (Updated 2026-01-26, v1.2.1)
 
 ## Summary
 - Continuous recording is stable with a 15-minute rolling buffer and retroactive export.
 - Menubar save workflow supports 1-15 minute exports (1-minute steps) plus advanced custom ranges.
 - Recording quality selection is implemented (Low/Medium/High); changes apply after restart.
+- Launch at Login fully functional using ServiceManagement framework (macOS 13.0+).
 - Performance remains low during recording; brief energy spikes occur when opening Preferences or revealing files.
 - Console log spam observed: "Sample buffer has no image buffer" (mitigation in progress).
 

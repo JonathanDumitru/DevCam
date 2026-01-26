@@ -41,8 +41,7 @@ struct PreferencesWindow: View {
     let bufferManager = BufferManager()
     let clipExporter = ClipExporter(
         bufferManager: bufferManager,
-        saveLocation: nil,
-        showNotifications: false
+        settings: settings
     )
 
     return PreferencesWindow(

@@ -255,8 +255,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("⚙️ DEBUG: Creating ClipExporter")
         clipExporter = ClipExporter(
             bufferManager: bufferManager,
-            saveLocation: settings.saveLocation,
-            showNotifications: settings.showNotifications
+            settings: settings
         )
         print("⚙️ DEBUG: ClipExporter created: \(clipExporter != nil ? "SUCCESS" : "FAILED")")
         assert(clipExporter != nil, "CRITICAL: ClipExporter is nil after creation!")

@@ -225,8 +225,7 @@ struct MenuBarView: View {
     )
     let clipExporter = ClipExporter(
         bufferManager: bufferManager,
-        saveLocation: nil,
-        showNotifications: false
+        settings: settings
     )
 
     MenuBarView(
