@@ -56,16 +56,17 @@ class KeyboardShortcutHandler {
     // MARK: - Event Handling
 
     private func handleKeyEvent(_ event: NSEvent, isLocal: Bool) -> NSEvent? {
-        // Check for Cmd+Shift modifier
+        // Check for Cmd+Option modifier (⌘⌥)
+        // Using Option instead of Shift to avoid conflict with macOS screenshot shortcuts (⌘⇧5/6)
         let modifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let isCommandShift = modifierFlags.contains([.command, .shift])
+        let isCommandOption = modifierFlags.contains([.command, .option])
 
-        guard isCommandShift else { return event }
+        guard isCommandOption else { return event }
 
         // Check key code
         let duration: TimeInterval?
         switch event.keyCode {
-        case 21: // 5
+        case 23: // 5
             duration = 300 // 5 minutes
             save5Handler?()
         case 22: // 6

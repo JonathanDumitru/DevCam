@@ -13,9 +13,9 @@ Last updated: 2026-01-26 (v1.2.1 beta)
 - No forward-recording mode or clips longer than 15 minutes.
 - Recording quality changes apply after restart (requires stream reconfiguration).
 - No display selection; DevCam records the primary display.
+- Keyboard shortcuts (⌘⌥5/6/7) only work when DevCam popover is open (App Store sandbox restriction).
 
 ## Fixed Recently
-- Keyboard shortcuts app-local only (fixed 2026-01-26) - Now work system-wide.
 - Console log spam from metadata frames (fixed 2026-01-26) - Added rate-limited logging.
 - Save location and notifications requiring restart (fixed 2026-01-26) - Now apply immediately.
 - Launch at login not functional (fixed 2026-01-26) - Now uses ServiceManagement framework.

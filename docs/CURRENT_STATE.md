@@ -5,7 +5,7 @@
 - Menubar save workflow supports 1-15 minute exports (1-minute steps) plus advanced custom ranges.
 - Recording quality selection is implemented (Low/Medium/High); changes apply after restart.
 - Launch at Login fully functional using ServiceManagement framework (macOS 13.0+).
-- Keyboard shortcuts (⌘⇧5/6/7) now work system-wide, not just when app is active.
+- Keyboard shortcuts (⌘⌥5/6/7) available for quick clip saving.
 - Save location and notifications apply immediately without restart.
 - Performance remains low during recording; brief energy spikes occur when opening Preferences or revealing files.
 
@@ -13,7 +13,7 @@
 - Recording starts automatically and maintains a rolling 15-minute buffer.
 - Save actions are enabled once buffer time accumulates.
 - Menubar reports recording state, buffer duration, and export progress.
-- Keyboard shortcuts (⌘⇧5/6/7) save 5/10/15 minute clips system-wide from any application.
+- Keyboard shortcuts (⌘⌥5/6/7) save 5/10/15 minute clips when DevCam popover is open.
 
 ## Evidence
 - Recent test notes provided via console logs and Activity Monitor during the 15-minute run.
