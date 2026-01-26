@@ -13,7 +13,7 @@
 - Recording starts automatically and maintains a rolling 15-minute buffer.
 - Save actions are enabled once buffer time accumulates.
 - Menubar reports recording state, buffer duration, and export progress.
-- Keyboard shortcuts save fixed 5/10/15 minute clips when DevCam is active.
+- Keyboard shortcuts (⌘⇧5/6/7) save 5/10/15 minute clips system-wide from any application.
 
 ## Evidence
 - Recent test notes provided via console logs and Activity Monitor during the 15-minute run.
@@ -36,7 +36,6 @@
 - Disk activity minimal during steady recording; temporary spikes during export/buffer rotation.
 
 ## In Progress
-- Investigating and reducing "Sample buffer has no image buffer" log spam.
 - Evaluating performance impacts across Low/Medium/High recording quality.
 
 ## Prior Incidents (Resolved)
@@ -47,6 +46,20 @@
 - `incident-logs/DevCam-2026-01-23-102332.txt`
 - `incident-logs/DevCam-2026-01-23-104322.txt`
 - `incident-logs/DevCam-2026-01-23-104842.txt`
+
+## Recently Resolved Issues (2026-01-26)
+### Console Log Spam
+- **Status**: RESOLVED
+- **Impact**: Console filled with ~3600 "Sample buffer has no image buffer" messages per minute during recording
+- **Root Cause**: ScreenCaptureKit sends metadata frames (cursor updates, window notifications) without pixel buffers; every frame logged a warning
+- **Fix**: Implemented rate-limited logging (once per 60 seconds) in `RecordingManager.swift:356-360`
+- **Verification**: Console output now clean during normal operation, occasional debug messages at reasonable intervals
+
+### Debug Print Cleanup
+- **Status**: COMPLETED
+- **Impact**: 145 print() statements cluttering console during normal operation
+- **Fix**: Removed all print() statements and replaced with proper DevCamLogger calls where appropriate
+- **Files Modified**: RecordingManager.swift (49), DevCamApp.swift (69), PermissionManager.swift (9), BufferManager.swift (6), AppSettings.swift (4), MenuBarView.swift (5), AdvancedClipWindow.swift (3)
 
 ## Recently Resolved Critical Bugs (2026-01-25)
 ### Bug #1: Menubar Icon Not Visible
