@@ -55,6 +55,25 @@ enum RecordingQuality: String, CaseIterable, Identifiable, Codable {
             return "Maximum quality, highest resource usage (100% native resolution)"
         }
     }
+
+    /// Returns the next lower quality level for graceful degradation.
+    /// Returns nil if already at lowest quality.
+    var lowerQuality: RecordingQuality? {
+        switch self {
+        case .high: return .medium
+        case .medium: return .low
+        case .low: return nil
+        }
+    }
+
+    /// Priority order for degradation (high -> medium -> low)
+    var degradationOrder: Int {
+        switch self {
+        case .high: return 2
+        case .medium: return 1
+        case .low: return 0
+        }
+    }
 }
 
 /// Manages user preferences and application settings with automatic persistence.
@@ -142,6 +161,37 @@ class AppSettings: ObservableObject {
 
         // Check if writable
         return FileManager.default.isWritableFile(atPath: location.path)
+    }
+
+    // MARK: - Quality Degradation
+
+    /// Temporary override for quality during degradation. If set, this takes precedence.
+    private var degradedQuality: RecordingQuality?
+
+    /// The effective quality to use for recording (considers degradation)
+    var effectiveRecordingQuality: RecordingQuality {
+        degradedQuality ?? recordingQuality
+    }
+
+    /// Sets a temporary degraded quality level. Use `resetDegradedQuality()` to restore.
+    func setDegradedQuality(_ quality: RecordingQuality) {
+        degradedQuality = quality
+        DevCamLogger.settings.warning("Quality degraded to \(quality.displayName)")
+        objectWillChange.send()
+    }
+
+    /// Resets degraded quality, restoring the user's configured quality.
+    func resetDegradedQuality() {
+        if degradedQuality != nil {
+            DevCamLogger.settings.info("Quality restored to user setting: \(self.recordingQuality.displayName)")
+            degradedQuality = nil
+            objectWillChange.send()
+        }
+    }
+
+    /// Returns true if quality is currently degraded below user setting.
+    var isQualityDegraded: Bool {
+        degradedQuality != nil
     }
 
     // MARK: - Launch at Login

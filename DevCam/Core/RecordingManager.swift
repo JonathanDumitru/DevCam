@@ -76,6 +76,29 @@ class RecordingManager: NSObject, ObservableObject {
     private var lastSegmentRotationTime: Date?
     private let watchdogInterval: TimeInterval = 90.0 // 1.5x segment duration
 
+    // MARK: - Auto-Recovery
+
+    private var autoRecoveryTimer: Timer?
+    private let autoRecoveryCooldown: TimeInterval = 30.0 // Wait 30s before auto-restart
+    private var autoRecoveryAttempts: Int = 0
+    private let maxAutoRecoveryAttempts: Int = 5
+    @Published private(set) var isInRecoveryMode: Bool = false
+
+    // MARK: - Permission Monitoring
+
+    private var permissionMonitorTimer: Timer?
+    private let permissionCheckInterval: TimeInterval = 10.0 // Check every 10 seconds
+
+    // MARK: - Periodic Buffer Validation
+
+    private var bufferValidationTimer: Timer?
+    private let bufferValidationInterval: TimeInterval = 300.0 // Validate every 5 minutes
+
+    // MARK: - Quality Degradation
+
+    private var qualityDegradationAttempted: Bool = false
+    @Published private(set) var isQualityDegraded: Bool = false
+
     // MARK: - Test Mode
 
     private var isTestMode: Bool {
@@ -96,6 +119,13 @@ class RecordingManager: NSObject, ObservableObject {
         self.settings = settings
         super.init()
         setupSystemEventObservers()
+        startPermissionMonitoring()
+        startPeriodicBufferValidation()
+
+        // Attempt crash recovery on initialization
+        Task { @MainActor in
+            await self.performCrashRecovery()
+        }
     }
 
     deinit {
@@ -105,6 +135,9 @@ class RecordingManager: NSObject, ObservableObject {
         if let wakeObserver = wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
+        stopAutoRecovery()
+        stopPermissionMonitoring()
+        stopPeriodicBufferValidation()
     }
 
     // MARK: - Public API
@@ -139,8 +172,9 @@ class RecordingManager: NSObject, ObservableObject {
             isRecording = true
             recordingError = nil
             retryCount = 0
+            qualityDegradationAttempted = false
             startWatchdog()
-            DevCamLogger.recording.info("Recording started successfully")
+            DevCamLogger.recording.info("Recording started successfully at \(self.settings.effectiveRecordingQuality.displayName) quality")
 
         } catch {
             DevCamLogger.recording.error("Failed to start recording: \(error.localizedDescription)")
@@ -226,6 +260,20 @@ class RecordingManager: NSObject, ObservableObject {
 
         } catch {
             DevCamLogger.recording.error("Stream setup failed: \(error.localizedDescription)")
+
+            // Attempt graceful quality degradation if not already at lowest
+            if let lowerQuality = settings.effectiveRecordingQuality.lowerQuality, !qualityDegradationAttempted {
+                qualityDegradationAttempted = true
+                DevCamLogger.recording.warning("Attempting quality degradation from \(self.settings.effectiveRecordingQuality.displayName) to \(lowerQuality.displayName)")
+
+                settings.setDegradedQuality(lowerQuality)
+                CriticalAlertManager.sendAlert(.qualityDegraded(from: settings.recordingQuality, to: lowerQuality))
+
+                // Retry with lower quality
+                try await setupAndStartStream()
+                return
+            }
+
             throw RecordingError.streamSetupFailed
         }
     }
@@ -245,8 +293,10 @@ class RecordingManager: NSObject, ObservableObject {
     private func createStreamConfiguration(for display: SCDisplay) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
 
-        // Apply resolution scaling based on quality setting
-        let scaleFactor = settings.recordingQuality.scaleFactor
+        // Apply resolution scaling based on effective quality (considers degradation)
+        let effectiveQuality = settings.effectiveRecordingQuality
+        let scaleFactor = effectiveQuality.scaleFactor
+        isQualityDegraded = settings.isQualityDegraded
         let scaledWidth = Int(Double(display.width) * scaleFactor)
         let scaledHeight = Int(Double(display.height) * scaleFactor)
 
@@ -460,6 +510,7 @@ class RecordingManager: NSObject, ObservableObject {
                 CriticalAlertManager.sendAlert(.recordingStopped(reason: "Maximum retry attempts exceeded"))
                 await stopRecording()
                 recordingError = RecordingError.maxRetriesExceeded
+                scheduleAutoRecovery()
             }
         }
     }
@@ -553,8 +604,228 @@ class RecordingManager: NSObject, ObservableObject {
                 recordingError = RecordingError.watchdogTimeout
                 CriticalAlertManager.sendAlert(.recordingStopped(reason: "Segment rotation timeout"))
                 await stopRecording()
+                scheduleAutoRecovery()
             }
         }
+    }
+
+    // MARK: - Auto-Recovery System
+
+    /// Schedules automatic recording restart after a cooldown period.
+    /// This ensures the app recovers from transient failures without user intervention.
+    private func scheduleAutoRecovery() {
+        guard autoRecoveryAttempts < maxAutoRecoveryAttempts else {
+            DevCamLogger.recording.error("Auto-recovery: max attempts (\(self.maxAutoRecoveryAttempts)) exhausted, giving up")
+            CriticalAlertManager.sendAlert(.recordingStopped(reason: "Automatic recovery failed. Please restart DevCam manually."))
+            isInRecoveryMode = false
+            return
+        }
+
+        // Don't schedule if already scheduled
+        guard autoRecoveryTimer == nil else { return }
+
+        isInRecoveryMode = true
+        autoRecoveryAttempts += 1
+
+        // Exponential backoff: 30s, 60s, 120s, 240s, 480s
+        let backoffMultiplier = pow(2.0, Double(autoRecoveryAttempts - 1))
+        let delay = autoRecoveryCooldown * backoffMultiplier
+
+        DevCamLogger.recording.info("Auto-recovery scheduled in \(Int(delay))s (attempt \(self.autoRecoveryAttempts)/\(self.maxAutoRecoveryAttempts))")
+
+        autoRecoveryTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.attemptAutoRecovery()
+            }
+        }
+    }
+
+    private func attemptAutoRecovery() async {
+        autoRecoveryTimer = nil
+
+        DevCamLogger.recording.info("Auto-recovery: attempting to restart recording")
+
+        // Check prerequisites
+        guard permissionManager.hasScreenRecordingPermission else {
+            DevCamLogger.recording.warning("Auto-recovery: permission denied, cannot restart")
+            CriticalAlertManager.sendAlert(.permissionRevoked)
+            isInRecoveryMode = false
+            return
+        }
+
+        let diskCheck = bufferManager.checkDiskSpace()
+        guard diskCheck.hasSpace else {
+            DevCamLogger.recording.warning("Auto-recovery: insufficient disk space, will retry later")
+            scheduleAutoRecovery()
+            return
+        }
+
+        // Validate buffer before restarting
+        bufferManager.validateBuffer()
+
+        // Reset retry count for fresh start
+        retryCount = 0
+
+        do {
+            try await startRecording()
+            DevCamLogger.recording.info("Auto-recovery: recording restarted successfully")
+            autoRecoveryAttempts = 0 // Reset on success
+            isInRecoveryMode = false
+            qualityDegradationAttempted = false // Allow degradation on next failure
+            CriticalAlertManager.sendAlert(.recordingRecovered)
+        } catch {
+            DevCamLogger.recording.error("Auto-recovery: restart failed - \(error.localizedDescription)")
+            scheduleAutoRecovery()
+        }
+    }
+
+    private func stopAutoRecovery() {
+        autoRecoveryTimer?.invalidate()
+        autoRecoveryTimer = nil
+    }
+
+    /// Resets auto-recovery state. Call this when user manually starts recording.
+    func resetAutoRecovery() {
+        stopAutoRecovery()
+        autoRecoveryAttempts = 0
+        isInRecoveryMode = false
+    }
+
+    // MARK: - Permission Monitoring
+
+    private func startPermissionMonitoring() {
+        guard !isTestMode else { return }
+
+        permissionMonitorTimer = Timer.scheduledTimer(withTimeInterval: permissionCheckInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkPermissionStatus()
+            }
+        }
+        DevCamLogger.recording.debug("Permission monitoring started")
+    }
+
+    private func stopPermissionMonitoring() {
+        permissionMonitorTimer?.invalidate()
+        permissionMonitorTimer = nil
+    }
+
+    private func checkPermissionStatus() {
+        let hadPermission = permissionManager.hasScreenRecordingPermission
+        permissionManager.checkPermission()
+        let hasPermission = permissionManager.hasScreenRecordingPermission
+
+        // Detect permission revocation while recording
+        if hadPermission && !hasPermission && isRecording {
+            DevCamLogger.recording.error("Screen recording permission revoked while recording!")
+            CriticalAlertManager.sendAlert(.permissionRevoked)
+
+            Task { @MainActor in
+                await self.stopRecording()
+                self.recordingError = RecordingError.permissionDenied
+            }
+        }
+
+        // Detect permission granted - can auto-recover if in recovery mode
+        if !hadPermission && hasPermission && isInRecoveryMode {
+            DevCamLogger.recording.info("Permission granted during recovery mode, attempting restart")
+            Task { @MainActor in
+                await self.attemptAutoRecovery()
+            }
+        }
+    }
+
+    // MARK: - Periodic Buffer Validation
+
+    private func startPeriodicBufferValidation() {
+        bufferValidationTimer = Timer.scheduledTimer(withTimeInterval: bufferValidationInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.performPeriodicValidation()
+            }
+        }
+        DevCamLogger.recording.debug("Periodic buffer validation started (every \(Int(self.bufferValidationInterval))s)")
+    }
+
+    private func stopPeriodicBufferValidation() {
+        bufferValidationTimer?.invalidate()
+        bufferValidationTimer = nil
+    }
+
+    private func performPeriodicValidation() {
+        let removedCount = bufferManager.validateBuffer()
+        if removedCount > 0 {
+            DevCamLogger.recording.warning("Periodic validation removed \(removedCount) corrupted segment(s)")
+        }
+    }
+
+    // MARK: - Crash Recovery
+
+    /// Recovers orphaned segments from a previous crash.
+    /// Scans the buffer directory for segment files not tracked in the buffer.
+    private func performCrashRecovery() async {
+        guard !isTestMode else { return }
+
+        let bufferDir = bufferManager.getBufferDirectory()
+        let fileManager = FileManager.default
+
+        guard let files = try? fileManager.contentsOfDirectory(at: bufferDir, includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]) else {
+            DevCamLogger.recording.debug("Crash recovery: could not read buffer directory")
+            return
+        }
+
+        let segmentFiles = files.filter { $0.pathExtension == "mp4" }
+        let trackedURLs = Set(bufferManager.getAllSegments().map { $0.fileURL })
+
+        var recoveredCount = 0
+        for file in segmentFiles {
+            // Skip if already tracked
+            if trackedURLs.contains(file) { continue }
+
+            // Check if file is valid (non-zero size)
+            guard let attributes = try? fileManager.attributesOfItem(atPath: file.path),
+                  let fileSize = attributes[.size] as? UInt64,
+                  fileSize > 0 else {
+                // Delete invalid orphan
+                try? fileManager.removeItem(at: file)
+                DevCamLogger.recording.debug("Crash recovery: deleted invalid orphan \(file.lastPathComponent)")
+                continue
+            }
+
+            // Try to recover creation time from filename or file attributes
+            let creationDate: Date
+            if let timestamp = extractTimestamp(from: file.lastPathComponent) {
+                creationDate = Date(timeIntervalSince1970: TimeInterval(timestamp))
+            } else if let created = attributes[.creationDate] as? Date {
+                creationDate = created
+            } else {
+                creationDate = Date()
+            }
+
+            // Estimate duration (assume 60s segments)
+            let estimatedDuration: TimeInterval = 60.0
+
+            // Add to buffer
+            bufferManager.addSegment(url: file, startTime: creationDate, duration: estimatedDuration)
+            recoveredCount += 1
+            DevCamLogger.recording.info("Crash recovery: recovered segment \(file.lastPathComponent)")
+        }
+
+        if recoveredCount > 0 {
+            DevCamLogger.recording.info("Crash recovery: recovered \(recoveredCount) orphaned segment(s)")
+
+            // Validate recovered segments
+            bufferManager.validateBuffer()
+        }
+    }
+
+    /// Extracts Unix timestamp from segment filename (e.g., "segment_1706123456.mp4" -> 1706123456)
+    private func extractTimestamp(from filename: String) -> Int? {
+        let pattern = "segment_(\\d+)\\.mp4"
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
+              let range = Range(match.range(at: 1), in: filename) else {
+            return nil
+        }
+        return Int(filename[range])
     }
 
     // MARK: - Test Mode
@@ -618,6 +889,7 @@ extension RecordingManager: SCStreamDelegate {
                 CriticalAlertManager.sendAlert(.recordingStopped(reason: "Screen capture stream error"))
                 await stopRecording()
                 self.recordingError = RecordingError.maxRetriesExceeded
+                scheduleAutoRecovery()
             }
         }
     }

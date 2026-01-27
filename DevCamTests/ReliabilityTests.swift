@@ -454,3 +454,243 @@ final class ErrorTypeTests: XCTestCase {
         XCTAssertFalse(ExportError.maxRetriesExceeded.isRetryable)
     }
 }
+
+// MARK: - Phase 1: Auto-Recovery Tests
+
+@MainActor
+final class AutoRecoveryTests: XCTestCase {
+    var bufferManager: BufferManager!
+    var permissionManager: PermissionManager!
+    var recordingManager: RecordingManager!
+    var settings: AppSettings!
+    var tempDirectory: URL!
+
+    override func setUp() async throws {
+        try await super.setUp()
+
+        tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DevCamAutoRecoveryTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        bufferManager = BufferManager(bufferDirectory: tempDirectory)
+        permissionManager = PermissionManager()
+        settings = AppSettings()
+        recordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+    }
+
+    override func tearDown() async throws {
+        await recordingManager.stopRecording()
+        recordingManager.resetAutoRecovery()
+        try? FileManager.default.removeItem(at: tempDirectory)
+        bufferManager = nil
+        permissionManager = nil
+        recordingManager = nil
+        settings = nil
+        tempDirectory = nil
+        try await super.tearDown()
+    }
+
+    func testRecoveryModeInitialState() async throws {
+        XCTAssertFalse(recordingManager.isInRecoveryMode, "Should not be in recovery mode initially")
+    }
+
+    func testResetAutoRecovery() async throws {
+        // Start recording and then reset recovery
+        try await recordingManager.startRecording()
+        recordingManager.resetAutoRecovery()
+
+        XCTAssertFalse(recordingManager.isInRecoveryMode, "Recovery mode should be reset")
+
+        await recordingManager.stopRecording()
+    }
+
+    func testQualityDegradedState() async throws {
+        XCTAssertFalse(recordingManager.isQualityDegraded, "Quality should not be degraded initially")
+    }
+}
+
+// MARK: - Phase 1: Quality Degradation Tests
+
+@MainActor
+final class QualityDegradationTests: XCTestCase {
+    var settings: AppSettings!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        settings = AppSettings()
+    }
+
+    override func tearDown() async throws {
+        settings?.resetDegradedQuality()
+        settings = nil
+        try await super.tearDown()
+    }
+
+    func testLowerQualityProgression() {
+        XCTAssertEqual(RecordingQuality.high.lowerQuality, .medium, "High should degrade to medium")
+        XCTAssertEqual(RecordingQuality.medium.lowerQuality, .low, "Medium should degrade to low")
+        XCTAssertNil(RecordingQuality.low.lowerQuality, "Low has no lower quality")
+    }
+
+    func testDegradationOrder() {
+        XCTAssertGreaterThan(RecordingQuality.high.degradationOrder, RecordingQuality.medium.degradationOrder)
+        XCTAssertGreaterThan(RecordingQuality.medium.degradationOrder, RecordingQuality.low.degradationOrder)
+    }
+
+    func testEffectiveQualityWithoutDegradation() {
+        settings.recordingQuality = .high
+        XCTAssertEqual(settings.effectiveRecordingQuality, .high, "Effective quality should match setting when not degraded")
+    }
+
+    func testEffectiveQualityWithDegradation() {
+        settings.recordingQuality = .high
+        settings.setDegradedQuality(.medium)
+
+        XCTAssertEqual(settings.effectiveRecordingQuality, .medium, "Effective quality should be degraded value")
+        XCTAssertTrue(settings.isQualityDegraded, "Should report degraded")
+    }
+
+    func testResetDegradedQuality() {
+        settings.recordingQuality = .high
+        settings.setDegradedQuality(.low)
+        settings.resetDegradedQuality()
+
+        XCTAssertEqual(settings.effectiveRecordingQuality, .high, "Should restore original quality")
+        XCTAssertFalse(settings.isQualityDegraded, "Should not be degraded after reset")
+    }
+}
+
+// MARK: - Phase 1: Crash Recovery Tests
+
+@MainActor
+final class CrashRecoveryTests: XCTestCase {
+    var bufferManager: BufferManager!
+    var tempDirectory: URL!
+
+    override func setUp() async throws {
+        try await super.setUp()
+
+        tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DevCamCrashRecoveryTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        bufferManager = BufferManager(bufferDirectory: tempDirectory)
+    }
+
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: tempDirectory)
+        bufferManager = nil
+        tempDirectory = nil
+        try await super.tearDown()
+    }
+
+    func testOrphanedSegmentRecovery() async throws {
+        // Simulate orphaned segments (files exist but not tracked)
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let orphanURL = tempDirectory.appendingPathComponent("segment_\(timestamp).mp4")
+        try "orphaned_content".write(to: orphanURL, atomically: true, encoding: .utf8)
+
+        // Create a new RecordingManager which triggers crash recovery
+        let permissionManager = PermissionManager()
+        let settings = AppSettings()
+        let recordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        // Give crash recovery time to run
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        // Segment should now be tracked
+        let segments = bufferManager.getAllSegments()
+        XCTAssertGreaterThan(segments.count, 0, "Should have recovered orphaned segment")
+
+        await recordingManager.stopRecording()
+    }
+
+    func testZeroByteOrphanDeletion() async throws {
+        // Create a zero-byte orphan (invalid)
+        let orphanURL = tempDirectory.appendingPathComponent("segment_invalid.mp4")
+        FileManager.default.createFile(atPath: orphanURL.path, contents: Data(), attributes: nil)
+
+        // Create a new RecordingManager which triggers crash recovery
+        let permissionManager = PermissionManager()
+        let settings = AppSettings()
+        let recordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        // Give crash recovery time to run
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        // Zero-byte file should be deleted
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphanURL.path), "Zero-byte orphan should be deleted")
+
+        await recordingManager.stopRecording()
+    }
+}
+
+// MARK: - Phase 1: Permission Monitoring Tests
+
+@MainActor
+final class PermissionMonitoringTests: XCTestCase {
+    var permissionManager: PermissionManager!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        permissionManager = PermissionManager()
+        permissionManager.initialize()
+    }
+
+    override func tearDown() async throws {
+        permissionManager = nil
+        try await super.tearDown()
+    }
+
+    func testPermissionStatusCheck() {
+        // In test mode, permission is auto-granted
+        XCTAssertTrue(permissionManager.hasScreenRecordingPermission, "Test mode should have permission")
+    }
+
+    func testPermissionStatusTypes() {
+        let status = permissionManager.screenRecordingPermissionStatus()
+        // In test mode, returns "notDetermined" but hasScreenRecordingPermission is true
+        XCTAssertNotNil(status, "Should return a status")
+    }
+}
+
+// MARK: - Phase 1: Alert Type Tests
+
+final class AlertTypeTests: XCTestCase {
+
+    func testAllAlertTypesHaveTitles() {
+        let alerts: [CriticalAlertManager.AlertType] = [
+            .recordingStopped(reason: "test"),
+            .diskSpaceLow(availableMB: 500),
+            .diskSpaceCritical,
+            .exportFailed(reason: "test"),
+            .permissionRevoked,
+            .qualityDegraded(from: .high, to: .medium),
+            .recordingRecovered
+        ]
+
+        for alert in alerts {
+            XCTAssertFalse(alert.title.isEmpty, "Alert should have a title")
+            XCTAssertFalse(alert.body.isEmpty, "Alert should have a body")
+        }
+    }
+
+    func testQualityDegradedAlertContent() {
+        let alert = CriticalAlertManager.AlertType.qualityDegraded(from: .high, to: .low)
+
+        XCTAssertTrue(alert.body.contains("High"), "Should mention original quality")
+        XCTAssertTrue(alert.body.contains("Low"), "Should mention degraded quality")
+    }
+}

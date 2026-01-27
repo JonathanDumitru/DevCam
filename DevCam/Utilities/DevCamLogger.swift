@@ -24,6 +24,8 @@ enum CriticalAlertManager {
         case diskSpaceCritical
         case exportFailed(reason: String)
         case permissionRevoked
+        case qualityDegraded(from: RecordingQuality, to: RecordingQuality)
+        case recordingRecovered
 
         var title: String {
             switch self {
@@ -37,6 +39,10 @@ enum CriticalAlertManager {
                 return "Clip Export Failed"
             case .permissionRevoked:
                 return "Screen Recording Permission Required"
+            case .qualityDegraded:
+                return "Recording Quality Reduced"
+            case .recordingRecovered:
+                return "Recording Recovered"
             }
         }
 
@@ -52,6 +58,10 @@ enum CriticalAlertManager {
                 return "Could not save clip: \(reason)"
             case .permissionRevoked:
                 return "DevCam needs screen recording permission to work. Click to open Settings."
+            case .qualityDegraded(let from, let to):
+                return "Recording quality reduced from \(from.displayName) to \(to.displayName) due to system constraints."
+            case .recordingRecovered:
+                return "DevCam automatically recovered and resumed recording."
             }
         }
     }
