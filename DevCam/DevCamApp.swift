@@ -307,10 +307,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = NSSize(width: 250, height: 300)
         popover.behavior = .transient
 
+        guard let bufferManager = bufferManager else {
+            DevCamLogger.app.error("Cannot create menubar view - bufferManager not initialized")
+            return
+        }
+
         // Create MenuBarView with validated managers
         let menuView = MenuBarView(
             recordingManager: recordingManager,
             clipExporter: clipExporter,
+            bufferManager: bufferManager,
             onPreferences: { [weak self] in
                 self?.menuBarPopover?.close()
                 self?.showPreferences()

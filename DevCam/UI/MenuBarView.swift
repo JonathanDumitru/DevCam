@@ -10,6 +10,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
+    let bufferManager: BufferManager
 
     let onPreferences: () -> Void
     let onQuit: () -> Void
@@ -36,7 +37,8 @@ struct MenuBarView: View {
         .sheet(isPresented: $showAdvancedWindow) {
             AdvancedClipWindow(
                 recordingManager: recordingManager,
-                clipExporter: clipExporter
+                clipExporter: clipExporter,
+                bufferManager: bufferManager
             )
         }
     }
@@ -328,6 +330,7 @@ struct MenuBarView: View {
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
+        bufferManager: bufferManager,
         onPreferences: { },
         onQuit: { }
     )

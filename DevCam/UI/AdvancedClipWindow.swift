@@ -2,7 +2,7 @@
 //  AdvancedClipWindow.swift
 //  DevCam
 //
-//  Advanced clip export with timeline, precise start/end selection, and annotations
+//  Advanced clip export with timeline, precise start/end selection, preview, and annotations
 //
 
 import SwiftUI
@@ -10,6 +10,7 @@ import SwiftUI
 struct AdvancedClipWindow: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
+    let bufferManager: BufferManager
     @Environment(\.dismiss) var dismiss
 
     // Timeline state
@@ -21,6 +22,10 @@ struct AdvancedClipWindow: View {
     @State private var customMinutes: String = "5"
     @State private var customSeconds: String = "00"
     @State private var useCustomDuration: Bool = false
+
+    // Preview (Phase 3)
+    @State private var showPreview: Bool = false
+    @State private var previewSegments: [SegmentInfo] = []
 
     // Annotations (Phase 3)
     @State private var clipTitle: String = ""
@@ -81,6 +86,11 @@ struct AdvancedClipWindow: View {
 
                     Divider()
 
+                    // Preview section (collapsible)
+                    previewSection
+
+                    Divider()
+
                     // Annotations section (collapsible)
                     annotationsSection
                 }
@@ -92,7 +102,7 @@ struct AdvancedClipWindow: View {
             // Export button
             exportButtonSection
         }
-        .frame(width: 520, height: 580)
+        .frame(width: 520, height: 680)
     }
 
     // MARK: - Header Section
@@ -403,6 +413,78 @@ struct AdvancedClipWindow: View {
         }
     }
 
+    // MARK: - Preview Section
+
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: {
+                withAnimation {
+                    showPreview.toggle()
+                    if showPreview {
+                        loadPreviewSegments()
+                    }
+                }
+            }) {
+                HStack {
+                    Text("Preview")
+                        .font(.headline)
+
+                    if !previewSegments.isEmpty && showPreview {
+                        Text("(\(formatDuration(min(clipDuration, maxDuration))))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: showPreview ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showPreview {
+                VStack(alignment: .leading, spacing: 8) {
+                    if maxDuration < 1 {
+                        // No buffer content
+                        HStack {
+                            Spacer()
+                            VStack(spacing: 8) {
+                                Image(systemName: "film.slash")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.secondary)
+                                Text("No recording available to preview")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .frame(height: 120)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .cornerRadius(8)
+                    } else {
+                        VideoPreviewView(segments: previewSegments)
+
+                        // Refresh preview button
+                        HStack {
+                            Spacer()
+                            Button(action: loadPreviewSegments) {
+                                Label("Refresh Preview", systemImage: "arrow.clockwise")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(8)
+            }
+        }
+    }
+
     // MARK: - Annotations Section
 
     private var annotationsSection: some View {
@@ -489,6 +571,11 @@ struct AdvancedClipWindow: View {
 
     // MARK: - Actions
 
+    private func loadPreviewSegments() {
+        let duration = min(clipDuration, maxDuration)
+        previewSegments = bufferManager.getSegmentsForTimeRange(duration: duration)
+    }
+
     private func exportClip() {
         isExporting = true
 
@@ -556,6 +643,7 @@ struct AdvancedClipWindow: View {
 
     AdvancedClipWindow(
         recordingManager: recordingManager,
-        clipExporter: clipExporter
+        clipExporter: clipExporter,
+        bufferManager: bufferManager
     )
 }
