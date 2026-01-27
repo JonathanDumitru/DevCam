@@ -21,6 +21,8 @@ enum RecordingError: Error {
     case writerSetupFailed
     case segmentFinalizationFailed
     case maxRetriesExceeded
+    case diskSpaceLow
+    case watchdogTimeout
 }
 
 @MainActor
@@ -68,6 +70,12 @@ class RecordingManager: NSObject, ObservableObject {
     private var sleepObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
 
+    // MARK: - Watchdog Timer
+
+    private var watchdogTimer: Timer?
+    private var lastSegmentRotationTime: Date?
+    private let watchdogInterval: TimeInterval = 90.0 // 1.5x segment duration
+
     // MARK: - Test Mode
 
     private var isTestMode: Bool {
@@ -112,6 +120,13 @@ class RecordingManager: NSObject, ObservableObject {
             throw RecordingError.permissionDenied
         }
 
+        // Check disk space before starting
+        let diskCheck = bufferManager.checkDiskSpace()
+        if !diskCheck.hasSpace {
+            DevCamLogger.recording.error("Cannot start recording: insufficient disk space")
+            throw RecordingError.diskSpaceLow
+        }
+
         DevCamLogger.recording.info("Starting recording")
 
         do {
@@ -124,6 +139,7 @@ class RecordingManager: NSObject, ObservableObject {
             isRecording = true
             recordingError = nil
             retryCount = 0
+            startWatchdog()
             DevCamLogger.recording.info("Recording started successfully")
 
         } catch {
@@ -138,6 +154,7 @@ class RecordingManager: NSObject, ObservableObject {
 
         segmentTimer?.invalidate()
         segmentTimer = nil
+        stopWatchdog()
 
         await finalizeCurrentSegment()
 
@@ -159,6 +176,7 @@ class RecordingManager: NSObject, ObservableObject {
 
         segmentTimer?.invalidate()
         segmentTimer = nil
+        stopWatchdog()
 
         await finalizeCurrentSegment()
 
@@ -414,16 +432,32 @@ class RecordingManager: NSObject, ObservableObject {
     }
 
     private func rotateSegment() async {
+        // Check disk space before creating new segment
+        let diskCheck = bufferManager.checkDiskSpace()
+        if !diskCheck.hasSpace {
+            DevCamLogger.recording.error("Stopping recording due to insufficient disk space")
+            recordingError = RecordingError.diskSpaceLow
+            CriticalAlertManager.sendAlert(.diskSpaceCritical)
+            await stopRecording()
+            return
+        } else if diskCheck.isLowSpace {
+            // Warn user but continue recording
+            let availableMB = Int(diskCheck.availableBytes / 1024 / 1024)
+            CriticalAlertManager.sendAlert(.diskSpaceLow(availableMB: availableMB))
+        }
+
         await finalizeCurrentSegment()
 
         do {
             try await startNewSegment()
+            lastSegmentRotationTime = Date()
         } catch {
             DevCamLogger.recording.error("Error rotating segment: \(String(describing: error), privacy: .public)")
             recordingError = error
 
             retryCount += 1
             if retryCount >= maxRetries {
+                CriticalAlertManager.sendAlert(.recordingStopped(reason: "Maximum retry attempts exceeded"))
                 await stopRecording()
                 recordingError = RecordingError.maxRetriesExceeded
             }
@@ -449,7 +483,76 @@ class RecordingManager: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                try? await self?.resumeRecording()
+                do {
+                    try await self?.resumeRecording()
+                    DevCamLogger.recording.info("Recording resumed after wake")
+                } catch {
+                    DevCamLogger.recording.error("Failed to resume recording after wake: \(error.localizedDescription)")
+                    self?.recordingError = error
+                }
+            }
+        }
+    }
+
+    // MARK: - Watchdog Timer
+
+    /// Starts a watchdog timer to detect if segment rotation has stalled.
+    /// If no segment rotation occurs within the watchdog interval, it triggers recovery.
+    private func startWatchdog() {
+        lastSegmentRotationTime = Date()
+        watchdogTimer = Timer.scheduledTimer(withTimeInterval: watchdogInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkWatchdog()
+            }
+        }
+        DevCamLogger.recording.debug("Watchdog timer started")
+    }
+
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = nil
+        DevCamLogger.recording.debug("Watchdog timer stopped")
+    }
+
+    private func checkWatchdog() {
+        guard isRecording else { return }
+
+        guard let lastRotation = lastSegmentRotationTime else {
+            // First segment hasn't been created yet, give it time
+            return
+        }
+
+        let timeSinceRotation = Date().timeIntervalSince(lastRotation)
+
+        // If it's been longer than watchdogInterval since last rotation, something is wrong
+        if timeSinceRotation > watchdogInterval {
+            DevCamLogger.recording.error("Watchdog timeout: no segment rotation in \(Int(timeSinceRotation))s, attempting recovery")
+
+            // Attempt to recover by forcing a segment rotation
+            Task { @MainActor in
+                await self.attemptWatchdogRecovery()
+            }
+        }
+    }
+
+    private func attemptWatchdogRecovery() async {
+        // First, validate buffer integrity
+        bufferManager.validateBuffer()
+
+        // Try to rotate segment
+        do {
+            try await startNewSegment()
+            lastSegmentRotationTime = Date()
+            DevCamLogger.recording.info("Watchdog recovery: segment rotation successful")
+        } catch {
+            DevCamLogger.recording.error("Watchdog recovery failed: \(error.localizedDescription)")
+
+            retryCount += 1
+            if retryCount >= maxRetries {
+                DevCamLogger.recording.error("Watchdog: max retries exceeded, stopping recording")
+                recordingError = RecordingError.watchdogTimeout
+                CriticalAlertManager.sendAlert(.recordingStopped(reason: "Segment rotation timeout"))
+                await stopRecording()
             }
         }
     }
@@ -461,7 +564,12 @@ class RecordingManager: NSObject, ObservableObject {
 
         segmentTimer = Timer.scheduledTimer(withTimeInterval: segmentDuration, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                try? await self?.createTestSegment()
+                do {
+                    try await self?.createTestSegment()
+                } catch {
+                    DevCamLogger.recording.error("Test mode segment creation failed: \(error.localizedDescription)")
+                    self?.recordingError = error
+                }
             }
         }
     }
@@ -500,8 +608,14 @@ extension RecordingManager: SCStreamDelegate {
                 try? await Task.sleep(nanoseconds: UInt64(backoffDelay * 1_000_000_000))
 
                 retryCount += 1
-                try? await startRecording()
+                do {
+                    try await startRecording()
+                    DevCamLogger.recording.info("Stream recovered after error (attempt \(self.retryCount))")
+                } catch {
+                    DevCamLogger.recording.error("Stream recovery failed: \(error.localizedDescription)")
+                }
             } else {
+                CriticalAlertManager.sendAlert(.recordingStopped(reason: "Screen capture stream error"))
                 await stopRecording()
                 self.recordingError = RecordingError.maxRetriesExceeded
             }

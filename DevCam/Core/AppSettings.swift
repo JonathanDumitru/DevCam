@@ -120,7 +120,12 @@ class AppSettings: ObservableObject {
 
         // Ensure save location exists
         let location = saveLocation
-        try? FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
+            DevCamLogger.settings.debug("Save location directory ensured: \(location.path)")
+        } catch {
+            DevCamLogger.settings.error("Failed to create save location directory: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Validation

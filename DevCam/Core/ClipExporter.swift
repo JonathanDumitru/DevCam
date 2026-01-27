@@ -18,6 +18,17 @@ enum ExportError: Error {
     case compositionFailed
     case exportFailed(String)
     case saveLocationUnavailable
+    case diskSpaceLow
+    case maxRetriesExceeded
+
+    var isRetryable: Bool {
+        switch self {
+        case .exportFailed, .compositionFailed:
+            return true
+        case .noSegmentsAvailable, .insufficientBufferContent, .saveLocationUnavailable, .diskSpaceLow, .maxRetriesExceeded:
+            return false
+        }
+    }
 }
 
 @MainActor
@@ -63,6 +74,11 @@ class ClipExporter: NSObject, ObservableObject {
 
     // MARK: - Initialization
 
+    // MARK: - Retry Configuration
+
+    private let maxExportRetries: Int = 3
+    private var currentRetryCount: Int = 0
+
     init(bufferManager: BufferManager, settings: AppSettings) {
         self.bufferManager = bufferManager
         self.settings = settings
@@ -70,7 +86,12 @@ class ClipExporter: NSObject, ObservableObject {
         super.init()
 
         // Ensure save location directory exists
-        try? FileManager.default.createDirectory(at: settings.saveLocation, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: settings.saveLocation, withIntermediateDirectories: true)
+            DevCamLogger.export.debug("Save location directory ensured: \(settings.saveLocation.path)")
+        } catch {
+            DevCamLogger.export.error("Failed to create save location directory: \(error.localizedDescription)")
+        }
 
         // Load persisted recent clips
         loadRecentClips()
@@ -101,6 +122,24 @@ class ClipExporter: NSObject, ObservableObject {
         } catch {
             exportError = error
             isExporting = false
+
+            // Send critical alert for export failures (only for non-trivial errors)
+            if let exportError = error as? ExportError {
+                switch exportError {
+                case .maxRetriesExceeded:
+                    CriticalAlertManager.sendAlert(.exportFailed(reason: "Export failed after multiple attempts"))
+                case .diskSpaceLow:
+                    CriticalAlertManager.sendAlert(.exportFailed(reason: "Insufficient disk space"))
+                case .saveLocationUnavailable:
+                    CriticalAlertManager.sendAlert(.exportFailed(reason: "Save location not accessible"))
+                case .noSegmentsAvailable:
+                    // Don't alert for this - it's expected if buffer is empty
+                    break
+                default:
+                    CriticalAlertManager.sendAlert(.exportFailed(reason: "Unexpected error"))
+                }
+            }
+
             throw error
         }
 
@@ -111,7 +150,13 @@ class ClipExporter: NSObject, ObservableObject {
     // The save location directory is ensured to exist during export operations
 
     func deleteClip(_ clip: ClipInfo) {
-        try? FileManager.default.removeItem(at: clip.fileURL)
+        do {
+            try FileManager.default.removeItem(at: clip.fileURL)
+            DevCamLogger.export.debug("Deleted clip: \(clip.fileURL.lastPathComponent)")
+        } catch {
+            DevCamLogger.export.error("Failed to delete clip \(clip.fileURL.lastPathComponent): \(error.localizedDescription)")
+            // Continue with removing from recent clips list even if file deletion fails
+        }
         recentClips.removeAll { $0.id == clip.id }
         saveRecentClips()
     }
@@ -124,8 +169,23 @@ class ClipExporter: NSObject, ObservableObject {
     // MARK: - Export Implementation
 
     private func performExport(duration: TimeInterval) async throws {
+        // Check disk space before export
+        let diskCheck = bufferManager.checkDiskSpace()
+        if !diskCheck.hasSpace {
+            DevCamLogger.export.error("Cannot export: insufficient disk space")
+            throw ExportError.diskSpaceLow
+        }
+
         // Ensure save location directory exists (handles dynamic settings changes)
-        try? FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+        } catch {
+            DevCamLogger.export.error("Failed to create save location: \(error.localizedDescription)")
+            throw ExportError.saveLocationUnavailable
+        }
+
+        // Validate buffer before export
+        bufferManager.validateBuffer()
 
         let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 
@@ -135,28 +195,57 @@ class ClipExporter: NSObject, ObservableObject {
 
         let availableDuration = segments.reduce(0.0) { $0 + $1.duration }
 
-        let composition = try createComposition(from: segments)
+        // Retry loop for transient failures
+        var lastError: Error?
+        currentRetryCount = 0
 
-        let outputURL = generateOutputURL()
+        while currentRetryCount < maxExportRetries {
+            do {
+                let composition = try createComposition(from: segments)
+                let outputURL = generateOutputURL()
 
-        try await exportComposition(composition, to: outputURL)
+                try await exportComposition(composition, to: outputURL)
 
-        let fileSize = try fileSize(at: outputURL)
-        let clipInfo = ClipInfo(
-            id: UUID(),
-            fileURL: outputURL,
-            timestamp: Date(),
-            duration: availableDuration,
-            fileSize: fileSize
-        )
+                let fileSize = try fileSize(at: outputURL)
+                let clipInfo = ClipInfo(
+                    id: UUID(),
+                    fileURL: outputURL,
+                    timestamp: Date(),
+                    duration: availableDuration,
+                    fileSize: fileSize
+                )
 
-        addToRecentClips(clipInfo)
+                addToRecentClips(clipInfo)
 
-        if showNotifications {
-            showExportNotification(clip: clipInfo)
+                if showNotifications {
+                    showExportNotification(clip: clipInfo)
+                }
+
+                exportProgress = 1.0
+                currentRetryCount = 0 // Reset on success
+                return
+
+            } catch let error as ExportError where error.isRetryable {
+                currentRetryCount += 1
+                lastError = error
+                DevCamLogger.export.warning("Export attempt \(self.currentRetryCount) failed: \(error.localizedDescription). Retrying...")
+
+                if currentRetryCount < maxExportRetries {
+                    // Exponential backoff: 1s, 2s, 4s
+                    let backoffDelay = pow(2.0, Double(currentRetryCount - 1))
+                    try? await Task.sleep(nanoseconds: UInt64(backoffDelay * 1_000_000_000))
+                }
+
+            } catch {
+                // Non-retryable error, fail immediately
+                DevCamLogger.export.error("Export failed with non-retryable error: \(error.localizedDescription)")
+                throw error
+            }
         }
 
-        exportProgress = 1.0
+        // All retries exhausted
+        DevCamLogger.export.error("Export failed after \(self.maxExportRetries) attempts")
+        throw ExportError.maxRetriesExceeded
     }
 
     private func createComposition(from segments: [SegmentInfo]) throws -> AVMutableComposition {
@@ -198,7 +287,16 @@ class ClipExporter: NSObject, ObservableObject {
     }
 
     private func exportComposition(_ composition: AVMutableComposition, to outputURL: URL) async throws {
-        try? FileManager.default.removeItem(at: outputURL)
+        // Remove existing file if present (shouldn't happen with unique timestamps, but be safe)
+        if FileManager.default.fileExists(atPath: outputURL.path) {
+            do {
+                try FileManager.default.removeItem(at: outputURL)
+                DevCamLogger.export.debug("Removed existing file at export URL")
+            } catch {
+                DevCamLogger.export.error("Failed to remove existing file at export URL: \(error.localizedDescription)")
+                throw ExportError.exportFailed("Cannot overwrite existing file: \(error.localizedDescription)")
+            }
+        }
 
         guard let exportSession = AVAssetExportSession(
             asset: composition,
@@ -303,7 +401,12 @@ class ClipExporter: NSObject, ObservableObject {
 
     private func exportTestClip(duration: TimeInterval) async throws {
         // Ensure save location directory exists (handles dynamic settings changes)
-        try? FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+        } catch {
+            DevCamLogger.export.error("Failed to create test save location: \(error.localizedDescription)")
+            throw ExportError.saveLocationUnavailable
+        }
 
         let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
 

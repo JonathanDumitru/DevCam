@@ -22,12 +22,12 @@ struct DevCamApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     private let permissionManager = PermissionManager()
-    private var bufferManager: BufferManager!
-    private var recordingManager: RecordingManager!
-    private var clipExporter: ClipExporter!
-    private var keyboardShortcutHandler: KeyboardShortcutHandler!
+    private var bufferManager: BufferManager?
+    private var recordingManager: RecordingManager?
+    private var clipExporter: ClipExporter?
+    private var keyboardShortcutHandler: KeyboardShortcutHandler?
     private var menuBarPopover: NSPopover?
-    private var settings: AppSettings!
+    private var settings: AppSettings?
     private var preferencesWindow: NSWindow?
 
     var isTestMode: Bool {
@@ -78,6 +78,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startRecording() {
+        guard let recordingManager = recordingManager else {
+            DevCamLogger.recording.error("Cannot start recording: RecordingManager not initialized")
+            return
+        }
+
         Task { @MainActor in
             do {
                 try await recordingManager.startRecording()
@@ -155,20 +160,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupKeyboardShortcuts() {
         keyboardShortcutHandler = KeyboardShortcutHandler()
-        keyboardShortcutHandler.registerShortcuts(
+        keyboardShortcutHandler?.registerShortcuts(
             onSave5Minutes: { [weak self] in
                 Task { @MainActor [weak self] in
-                    try? await self?.clipExporter.exportClip(duration: 300)
+                    do {
+                        try await self?.clipExporter?.exportClip(duration: 300)
+                        DevCamLogger.export.info("5-minute clip exported via keyboard shortcut")
+                    } catch {
+                        DevCamLogger.export.error("Failed to export 5-minute clip: \(error.localizedDescription)")
+                    }
                 }
             },
             onSave10Minutes: { [weak self] in
                 Task { @MainActor [weak self] in
-                    try? await self?.clipExporter.exportClip(duration: 600)
+                    do {
+                        try await self?.clipExporter?.exportClip(duration: 600)
+                        DevCamLogger.export.info("10-minute clip exported via keyboard shortcut")
+                    } catch {
+                        DevCamLogger.export.error("Failed to export 10-minute clip: \(error.localizedDescription)")
+                    }
                 }
             },
             onSave15Minutes: { [weak self] in
                 Task { @MainActor [weak self] in
-                    try? await self?.clipExporter.exportClip(duration: 900)
+                    do {
+                        try await self?.clipExporter?.exportClip(duration: 900)
+                        DevCamLogger.export.info("15-minute clip exported via keyboard shortcut")
+                    } catch {
+                        DevCamLogger.export.error("Failed to export 15-minute clip: \(error.localizedDescription)")
+                    }
                 }
             }
         )
@@ -178,7 +198,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         DevCamLogger.app.info("Application terminating")
         Task { @MainActor in
-            await recordingManager.stopRecording()
+            await recordingManager?.stopRecording()
         }
     }
 
@@ -195,25 +215,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// segments once BufferManager is initialized.
     private func setupManagers() {
         settings = AppSettings()
-        assert(settings != nil, "CRITICAL: AppSettings is nil after creation!")
+        guard settings != nil else {
+            DevCamLogger.app.fault("CRITICAL: AppSettings initialization failed")
+            return
+        }
 
         bufferManager = BufferManager()
-        assert(bufferManager != nil, "CRITICAL: BufferManager is nil after creation!")
+        guard bufferManager != nil else {
+            DevCamLogger.app.fault("CRITICAL: BufferManager initialization failed")
+            return
+        }
+
+        guard let settings = settings, let bufferManager = bufferManager else {
+            DevCamLogger.app.fault("CRITICAL: Required managers are nil")
+            return
+        }
 
         recordingManager = RecordingManager(
             bufferManager: bufferManager,
             permissionManager: permissionManager,
             settings: settings
         )
-        assert(recordingManager != nil, "CRITICAL: RecordingManager is nil after creation!")
+        guard recordingManager != nil else {
+            DevCamLogger.app.fault("CRITICAL: RecordingManager initialization failed")
+            return
+        }
 
         clipExporter = ClipExporter(
             bufferManager: bufferManager,
             settings: settings
         )
-        assert(clipExporter != nil, "CRITICAL: ClipExporter is nil after creation!")
+        guard clipExporter != nil else {
+            DevCamLogger.app.fault("CRITICAL: ClipExporter initialization failed")
+            return
+        }
 
-        DevCamLogger.app.info("Managers initialized")
+        DevCamLogger.app.info("Managers initialized successfully")
     }
 
     private func showPreferences() {
