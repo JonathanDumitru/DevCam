@@ -103,7 +103,18 @@ class ClipExporter: NSObject, ObservableObject {
 
     // MARK: - Public API
 
-    func exportClip(duration: TimeInterval) async throws {
+    /// Export a clip with optional annotations.
+    /// - Parameters:
+    ///   - duration: Duration of the clip in seconds
+    ///   - title: Optional title for the clip
+    ///   - notes: Optional notes/description
+    ///   - tags: Optional array of tags
+    func exportClip(
+        duration: TimeInterval,
+        title: String? = nil,
+        notes: String? = nil,
+        tags: [String] = []
+    ) async throws {
         guard !isExporting else {
             DevCamLogger.export.notice("Export already in progress")
             return
@@ -115,9 +126,9 @@ class ClipExporter: NSObject, ObservableObject {
 
         do {
             if isTestMode {
-                try await exportTestClip(duration: duration)
+                try await exportTestClip(duration: duration, title: title, notes: notes, tags: tags)
             } else {
-                try await performExport(duration: duration)
+                try await performExport(duration: duration, title: title, notes: notes, tags: tags)
             }
         } catch {
             exportError = error
@@ -168,7 +179,12 @@ class ClipExporter: NSObject, ObservableObject {
 
     // MARK: - Export Implementation
 
-    private func performExport(duration: TimeInterval) async throws {
+    private func performExport(
+        duration: TimeInterval,
+        title: String? = nil,
+        notes: String? = nil,
+        tags: [String] = []
+    ) async throws {
         // Check disk space before export
         let diskCheck = bufferManager.checkDiskSpace()
         if !diskCheck.hasSpace {
@@ -212,7 +228,10 @@ class ClipExporter: NSObject, ObservableObject {
                     fileURL: outputURL,
                     timestamp: Date(),
                     duration: availableDuration,
-                    fileSize: fileSize
+                    fileSize: fileSize,
+                    title: title,
+                    notes: notes,
+                    tags: tags
                 )
 
                 addToRecentClips(clipInfo)
@@ -399,7 +418,12 @@ class ClipExporter: NSObject, ObservableObject {
 
     // MARK: - Test Mode
 
-    private func exportTestClip(duration: TimeInterval) async throws {
+    private func exportTestClip(
+        duration: TimeInterval,
+        title: String? = nil,
+        notes: String? = nil,
+        tags: [String] = []
+    ) async throws {
         // Ensure save location directory exists (handles dynamic settings changes)
         do {
             try FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
@@ -431,7 +455,10 @@ class ClipExporter: NSObject, ObservableObject {
             fileURL: outputURL,
             timestamp: Date(),
             duration: availableDuration,
-            fileSize: fileSize
+            fileSize: fileSize,
+            title: title,
+            notes: notes,
+            tags: tags
         )
 
         addToRecentClips(clipInfo)
