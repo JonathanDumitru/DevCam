@@ -21,6 +21,11 @@ struct PreferencesWindow: View {
                     Label("General", systemImage: "gear")
                 }
 
+            RecordingTab(settings: settings, recordingManager: recordingManager)
+                .tabItem {
+                    Label("Recording", systemImage: "record.circle")
+                }
+
             ClipsTab(clipExporter: clipExporter)
                 .tabItem {
                     Label("Clips", systemImage: "film")
@@ -36,7 +41,7 @@ struct PreferencesWindow: View {
                     Label("Privacy", systemImage: "lock.shield")
                 }
         }
-        .frame(width: 500, height: 450)
+        .frame(width: 500, height: 500)
     }
 }
 

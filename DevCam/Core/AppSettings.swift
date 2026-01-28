@@ -76,6 +76,92 @@ enum RecordingQuality: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// Display selection mode for multi-monitor support
+enum DisplaySelectionMode: String, CaseIterable, Identifiable, Codable {
+    case primary = "primary"       // Largest/primary display
+    case specific = "specific"     // User-selected display
+    case all = "all"               // All displays (not yet implemented)
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .primary: return "Primary Display"
+        case .specific: return "Specific Display"
+        case .all: return "All Displays"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .primary: return "Record the largest connected display"
+        case .specific: return "Record a specific display you select"
+        case .all: return "Record all displays in a single video"
+        }
+    }
+}
+
+/// Audio capture mode for recordings
+enum AudioCaptureMode: String, CaseIterable, Identifiable, Codable {
+    case none = "none"
+    case system = "system"
+    case microphone = "microphone"
+    case both = "both"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: return "No Audio"
+        case .system: return "System Audio"
+        case .microphone: return "Microphone"
+        case .both: return "System + Microphone"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .none: return "Record video only, no audio"
+        case .system: return "Capture system sounds and app audio"
+        case .microphone: return "Capture microphone input"
+        case .both: return "Capture both system audio and microphone"
+        }
+    }
+
+    var capturesSystemAudio: Bool {
+        self == .system || self == .both
+    }
+
+    var capturesMicrophone: Bool {
+        self == .microphone || self == .both
+    }
+}
+
+/// Battery-aware recording mode
+enum BatteryMode: String, CaseIterable, Identifiable, Codable {
+    case ignore = "ignore"           // Ignore battery state
+    case reduceQuality = "reduce"    // Reduce quality on battery
+    case pauseOnLow = "pause"        // Pause when battery is low
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ignore: return "Ignore Battery"
+        case .reduceQuality: return "Reduce Quality on Battery"
+        case .pauseOnLow: return "Pause on Low Battery"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .ignore: return "Record at full quality regardless of battery state"
+        case .reduceQuality: return "Automatically reduce quality when on battery power"
+        case .pauseOnLow: return "Pause recording when battery drops below 20%"
+        }
+    }
+}
+
 /// Manages user preferences and application settings with automatic persistence.
 ///
 /// Uses @AppStorage property wrappers for automatic UserDefaults synchronization.
@@ -95,6 +181,26 @@ class AppSettings: ObservableObject {
     @AppStorage("showNotifications") var showNotifications: Bool = true
     @AppStorage("bufferSize") var bufferSize: Int = 900 // 15 minutes default
     @AppStorage("recordingQuality") var recordingQuality: RecordingQuality = .medium
+
+    // MARK: - Display Settings (Phase 4)
+
+    @AppStorage("displaySelectionMode") var displaySelectionMode: DisplaySelectionMode = .primary
+    @AppStorage("selectedDisplayID") var selectedDisplayID: UInt32 = 0
+
+    // MARK: - Audio Settings (Phase 4)
+
+    @AppStorage("audioCaptureMode") var audioCaptureMode: AudioCaptureMode = .none
+
+    // MARK: - Battery Settings (Phase 4)
+
+    @AppStorage("batteryMode") var batteryMode: BatteryMode = .ignore
+    @AppStorage("lowBatteryThreshold") var lowBatteryThreshold: Int = 20 // Percent
+
+    // MARK: - Adaptive Quality Settings (Phase 4)
+
+    @AppStorage("adaptiveQualityEnabled") var adaptiveQualityEnabled: Bool = false
+    @AppStorage("cpuThresholdHigh") var cpuThresholdHigh: Int = 80 // Reduce quality above this %
+    @AppStorage("cpuThresholdLow") var cpuThresholdLow: Int = 50 // Restore quality below this %
 
     // Save location as URL
     var saveLocation: URL {

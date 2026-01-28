@@ -51,9 +51,15 @@ class RecordingManager: NSObject, ObservableObject {
 
     private var currentWriter: AVAssetWriter?
     private var currentWriterInput: AVAssetWriterInput?
+    private var currentAudioInput: AVAssetWriterInput?
     private var currentSegmentURL: URL?
     private var currentSegmentStartTime: Date?
     private var isWriterReady: Bool = false
+
+    // MARK: - Audio Capture
+
+    private var microphoneCaptureSession: AVCaptureSession?
+    private var microphoneAudioOutput: AVCaptureAudioDataOutput?
 
     // MARK: - Timing
 
@@ -94,6 +100,18 @@ class RecordingManager: NSObject, ObservableObject {
     private var bufferValidationTimer: Timer?
     private let bufferValidationInterval: TimeInterval = 300.0 // Validate every 5 minutes
 
+    // MARK: - Battery Monitoring
+
+    private var batteryMonitor: BatteryMonitor?
+    private var batteryCancellable: AnyCancellable?
+    @Published private(set) var isPausedForBattery: Bool = false
+
+    // MARK: - Adaptive Quality Monitoring
+
+    private var systemLoadMonitor: SystemLoadMonitor?
+    private var systemLoadCancellable: AnyCancellable?
+    private var adaptiveQualityReduced: Bool = false
+
     // MARK: - Quality Degradation
 
     private var qualityDegradationAttempted: Bool = false
@@ -121,6 +139,8 @@ class RecordingManager: NSObject, ObservableObject {
         setupSystemEventObservers()
         startPermissionMonitoring()
         startPeriodicBufferValidation()
+        setupBatteryMonitoring()
+        setupAdaptiveQualityMonitoring()
 
         // Attempt crash recovery on initialization
         Task { @MainActor in
@@ -138,6 +158,8 @@ class RecordingManager: NSObject, ObservableObject {
         stopAutoRecovery()
         stopPermissionMonitoring()
         stopPeriodicBufferValidation()
+        stopBatteryMonitoring()
+        stopAdaptiveQualityMonitoring()
     }
 
     // MARK: - Public API
@@ -236,15 +258,15 @@ class RecordingManager: NSObject, ObservableObject {
         let displays = try await getAvailableDisplays()
         DevCamLogger.recording.debug("Found \(displays.count) display(s)")
 
-        guard let primaryDisplay = selectPrimaryDisplay(from: displays) else {
-            DevCamLogger.recording.error("No primary display found")
+        guard let selectedDisplay = selectDisplay(from: displays) else {
+            DevCamLogger.recording.error("No display available for recording")
             throw RecordingError.noDisplaysAvailable
         }
 
-        let config = createStreamConfiguration(for: primaryDisplay)
-        DevCamLogger.recording.info("Recording at \(config.width)x\(config.height)")
+        let config = createStreamConfiguration(for: selectedDisplay)
+        DevCamLogger.recording.info("Recording display \(selectedDisplay.displayID) at \(config.width)x\(config.height)")
 
-        let filter = try createContentFilter(for: primaryDisplay)
+        let filter = try createContentFilter(for: selectedDisplay)
         let output = VideoStreamOutput(recordingManager: self)
         self.streamOutput = output
 
@@ -253,6 +275,13 @@ class RecordingManager: NSObject, ObservableObject {
 
         do {
             try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: .main)
+
+            // Add audio output if system audio capture is enabled
+            if settings.audioCaptureMode.capturesSystemAudio {
+                try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: .main)
+                DevCamLogger.recording.debug("Added audio stream output")
+            }
+
             try await stream.startCapture()
             try await startNewSegment()
             scheduleSegmentRotation()
@@ -286,6 +315,44 @@ class RecordingManager: NSObject, ObservableObject {
         return content.displays
     }
 
+    /// Returns a list of available displays for UI display selection.
+    /// Each entry contains the display ID and a description.
+    func getDisplayList() async -> [(id: UInt32, name: String, width: Int, height: Int)] {
+        do {
+            let displays = try await getAvailableDisplays()
+            return displays.enumerated().map { index, display in
+                let name = "Display \(index + 1)"
+                return (id: display.displayID, name: name, width: display.width, height: display.height)
+            }
+        } catch {
+            DevCamLogger.recording.error("Failed to get display list: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    /// Selects a display based on the current display selection mode.
+    private func selectDisplay(from displays: [SCDisplay]) -> SCDisplay? {
+        switch settings.displaySelectionMode {
+        case .primary:
+            return selectPrimaryDisplay(from: displays)
+
+        case .specific:
+            // Find display with matching ID
+            if let specificDisplay = displays.first(where: { $0.displayID == settings.selectedDisplayID }) {
+                return specificDisplay
+            }
+            // Fall back to primary if selected display not found
+            DevCamLogger.recording.warning("Selected display \(self.settings.selectedDisplayID) not found, falling back to primary")
+            return selectPrimaryDisplay(from: displays)
+
+        case .all:
+            // For "all displays" mode, we'd need to create a combined recording
+            // This is more complex and requires compositing - fall back to primary for now
+            DevCamLogger.recording.info("All displays mode not yet implemented, using primary display")
+            return selectPrimaryDisplay(from: displays)
+        }
+    }
+
     private func selectPrimaryDisplay(from displays: [SCDisplay]) -> SCDisplay? {
         return displays.max(by: { $0.width * $0.height < $1.width * $1.height })
     }
@@ -312,6 +379,14 @@ class RecordingManager: NSObject, ObservableObject {
         config.queueDepth = 5
         config.showsCursor = true
 
+        // Configure audio capture if enabled
+        if settings.audioCaptureMode.capturesSystemAudio {
+            config.capturesAudio = true
+            config.sampleRate = 48000
+            config.channelCount = 2
+            DevCamLogger.recording.debug("System audio capture enabled")
+        }
+
         DevCamLogger.recording.debug("Stream configured: \(scaledWidth)×\(scaledHeight) at \(self.settings.recordingQuality.displayName) quality")
 
         return config
@@ -335,16 +410,30 @@ class RecordingManager: NSObject, ObservableObject {
         }
 
         // Use stored display dimensions
-        let input = createVideoInput(width: currentDisplayWidth, height: currentDisplayHeight)
+        let videoInput = createVideoInput(width: currentDisplayWidth, height: currentDisplayHeight)
 
-        guard writer.canAdd(input) else {
+        guard writer.canAdd(videoInput) else {
             throw RecordingError.writerSetupFailed
         }
 
-        writer.add(input)
+        writer.add(videoInput)
+
+        // Add audio input if audio capture is enabled
+        if settings.audioCaptureMode != .none {
+            let audioInput = createAudioInput()
+            if writer.canAdd(audioInput) {
+                writer.add(audioInput)
+                self.currentAudioInput = audioInput
+                DevCamLogger.recording.debug("Audio input added to segment")
+            } else {
+                DevCamLogger.recording.warning("Could not add audio input to writer")
+            }
+        } else {
+            self.currentAudioInput = nil
+        }
 
         self.currentWriter = writer
-        self.currentWriterInput = input
+        self.currentWriterInput = videoInput
         self.currentSegmentURL = segmentURL
         self.currentSegmentStartTime = Date()
 
@@ -363,6 +452,19 @@ class RecordingManager: NSObject, ObservableObject {
         writer.startSession(atSourceTime: .zero)
         self.isWriterReady = true
         DevCamLogger.recording.debug("Started segment: \(filename)")
+    }
+
+    private func createAudioInput() -> AVAssetWriterInput {
+        let audioSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48000,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 128000
+        ]
+
+        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+        input.expectsMediaDataInRealTime = true
+        return input
     }
 
     private func createVideoInput(width: Int, height: Int) -> AVAssetWriterInput {
@@ -428,6 +530,17 @@ class RecordingManager: NSObject, ObservableObject {
                 DevCamLogger.recording.warning("Dropping frames - input not ready for data")
                 lastDroppedFrameWarning = now
             }
+        }
+    }
+
+    /// Processes audio samples from ScreenCaptureKit (system audio) and writes them to the current segment.
+    func processAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) async {
+        guard let audioInput = currentAudioInput else {
+            return
+        }
+
+        if audioInput.isReadyForMoreMediaData {
+            audioInput.append(sampleBuffer)
         }
     }
 
@@ -757,6 +870,169 @@ class RecordingManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Battery Monitoring
+
+    private func setupBatteryMonitoring() {
+        guard settings.batteryMode != .ignore else { return }
+
+        batteryMonitor = BatteryMonitor.shared
+        batteryMonitor?.startMonitoring(lowBatteryThreshold: settings.lowBatteryThreshold)
+
+        // Observe battery state changes
+        batteryCancellable = batteryMonitor?.$batteryState
+            .dropFirst() // Skip initial value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                Task { @MainActor [weak self] in
+                    self?.handleBatteryStateChange(state)
+                }
+            }
+
+        DevCamLogger.recording.debug("Battery monitoring configured: mode=\(self.settings.batteryMode.rawValue)")
+    }
+
+    private func stopBatteryMonitoring() {
+        batteryCancellable?.cancel()
+        batteryCancellable = nil
+        batteryMonitor?.stopMonitoring()
+    }
+
+    private func handleBatteryStateChange(_ state: BatteryState) {
+        guard settings.batteryMode != .ignore else { return }
+
+        switch settings.batteryMode {
+        case .ignore:
+            break
+
+        case .reduceQuality:
+            handleReduceQualityOnBattery(state)
+
+        case .pauseOnLow:
+            handlePauseOnLowBattery(state)
+        }
+    }
+
+    private func handleReduceQualityOnBattery(_ state: BatteryState) {
+        if state.isOnBattery && !state.isCharging {
+            // Reduce quality when on battery
+            if !settings.isQualityDegraded {
+                if let lowerQuality = settings.effectiveRecordingQuality.lowerQuality {
+                    DevCamLogger.recording.info("Reducing quality due to battery power")
+                    settings.setDegradedQuality(lowerQuality)
+                    isQualityDegraded = true
+                    CriticalAlertManager.sendAlert(.qualityDegraded(from: settings.recordingQuality, to: lowerQuality))
+                }
+            }
+        } else if !state.isOnBattery || state.isCharging {
+            // Restore quality when plugged in or charging
+            if settings.isQualityDegraded {
+                DevCamLogger.recording.info("Restoring quality - power connected")
+                settings.resetDegradedQuality()
+                isQualityDegraded = false
+            }
+        }
+    }
+
+    private func handlePauseOnLowBattery(_ state: BatteryState) {
+        let isLowBattery = state.isOnBattery && state.batteryLevel <= settings.lowBatteryThreshold
+
+        if isLowBattery && isRecording && !isPausedForBattery {
+            // Pause recording on low battery
+            DevCamLogger.recording.warning("Pausing recording due to low battery (\(state.batteryLevel)%)")
+            isPausedForBattery = true
+
+            Task { @MainActor in
+                await self.pauseRecording()
+                CriticalAlertManager.sendAlert(.recordingStopped(reason: "Low battery (\(state.batteryLevel)%)"))
+            }
+
+        } else if !isLowBattery && isPausedForBattery {
+            // Resume recording when battery is okay or charging
+            if !state.isOnBattery || state.isCharging || state.batteryLevel > settings.lowBatteryThreshold {
+                DevCamLogger.recording.info("Resuming recording - battery charging or above threshold")
+                isPausedForBattery = false
+
+                Task { @MainActor in
+                    do {
+                        try await self.resumeRecording()
+                        CriticalAlertManager.sendAlert(.recordingRecovered)
+                    } catch {
+                        DevCamLogger.recording.error("Failed to resume after battery: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Updates battery monitoring settings. Call when settings change.
+    func updateBatteryMonitoring() {
+        stopBatteryMonitoring()
+
+        if settings.batteryMode != .ignore {
+            setupBatteryMonitoring()
+        }
+    }
+
+    // MARK: - Adaptive Quality Monitoring
+
+    private func setupAdaptiveQualityMonitoring() {
+        guard settings.adaptiveQualityEnabled else { return }
+
+        systemLoadMonitor = SystemLoadMonitor.shared
+        systemLoadMonitor?.startMonitoring(
+            highThreshold: settings.cpuThresholdHigh,
+            lowThreshold: settings.cpuThresholdLow
+        )
+
+        // Observe system load changes
+        systemLoadCancellable = systemLoadMonitor?.$isHighLoad
+            .dropFirst() // Skip initial value
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isHighLoad in
+                Task { @MainActor [weak self] in
+                    self?.handleSystemLoadChange(isHighLoad)
+                }
+            }
+
+        DevCamLogger.recording.debug("Adaptive quality monitoring configured")
+    }
+
+    private func stopAdaptiveQualityMonitoring() {
+        systemLoadCancellable?.cancel()
+        systemLoadCancellable = nil
+        systemLoadMonitor?.stopMonitoring()
+    }
+
+    private func handleSystemLoadChange(_ isHighLoad: Bool) {
+        guard settings.adaptiveQualityEnabled else { return }
+
+        if isHighLoad && !adaptiveQualityReduced {
+            // Reduce quality due to high system load
+            if let lowerQuality = settings.effectiveRecordingQuality.lowerQuality {
+                DevCamLogger.recording.warning("Reducing quality due to high CPU load")
+                settings.setDegradedQuality(lowerQuality)
+                isQualityDegraded = true
+                adaptiveQualityReduced = true
+                CriticalAlertManager.sendAlert(.qualityDegraded(from: settings.recordingQuality, to: lowerQuality))
+            }
+        } else if !isHighLoad && adaptiveQualityReduced {
+            // Restore quality when load normalizes
+            DevCamLogger.recording.info("Restoring quality - system load normalized")
+            settings.resetDegradedQuality()
+            isQualityDegraded = false
+            adaptiveQualityReduced = false
+        }
+    }
+
+    /// Updates adaptive quality monitoring settings. Call when settings change.
+    func updateAdaptiveQualityMonitoring() {
+        stopAdaptiveQualityMonitoring()
+
+        if settings.adaptiveQualityEnabled {
+            setupAdaptiveQualityMonitoring()
+        }
+    }
+
     // MARK: - Crash Recovery
 
     /// Recovers orphaned segments from a previous crash.
@@ -905,10 +1181,15 @@ class VideoStreamOutput: NSObject, SCStreamOutput {
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen else { return }
-
         Task { @MainActor in
-            await recordingManager?.processSampleBuffer(sampleBuffer)
+            switch type {
+            case .screen:
+                await recordingManager?.processSampleBuffer(sampleBuffer)
+            case .audio:
+                await recordingManager?.processAudioSampleBuffer(sampleBuffer)
+            @unknown default:
+                break
+            }
         }
     }
 }
