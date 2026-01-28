@@ -55,6 +55,111 @@ enum RecordingQuality: String, CaseIterable, Identifiable, Codable {
             return "Maximum quality, highest resource usage (100% native resolution)"
         }
     }
+
+    /// Returns the next lower quality level for graceful degradation.
+    /// Returns nil if already at lowest quality.
+    var lowerQuality: RecordingQuality? {
+        switch self {
+        case .high: return .medium
+        case .medium: return .low
+        case .low: return nil
+        }
+    }
+
+    /// Priority order for degradation (high -> medium -> low)
+    var degradationOrder: Int {
+        switch self {
+        case .high: return 2
+        case .medium: return 1
+        case .low: return 0
+        }
+    }
+}
+
+/// Display selection mode for multi-monitor support
+enum DisplaySelectionMode: String, CaseIterable, Identifiable, Codable {
+    case primary = "primary"       // Largest/primary display
+    case specific = "specific"     // User-selected display
+    case all = "all"               // All displays (not yet implemented)
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .primary: return "Primary Display"
+        case .specific: return "Specific Display"
+        case .all: return "All Displays"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .primary: return "Record the largest connected display"
+        case .specific: return "Record a specific display you select"
+        case .all: return "Record all displays in a single video"
+        }
+    }
+}
+
+/// Audio capture mode for recordings
+enum AudioCaptureMode: String, CaseIterable, Identifiable, Codable {
+    case none = "none"
+    case system = "system"
+    case microphone = "microphone"
+    case both = "both"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: return "No Audio"
+        case .system: return "System Audio"
+        case .microphone: return "Microphone"
+        case .both: return "System + Microphone"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .none: return "Record video only, no audio"
+        case .system: return "Capture system sounds and app audio"
+        case .microphone: return "Capture microphone input"
+        case .both: return "Capture both system audio and microphone"
+        }
+    }
+
+    var capturesSystemAudio: Bool {
+        self == .system || self == .both
+    }
+
+    var capturesMicrophone: Bool {
+        self == .microphone || self == .both
+    }
+}
+
+/// Battery-aware recording mode
+enum BatteryMode: String, CaseIterable, Identifiable, Codable {
+    case ignore = "ignore"           // Ignore battery state
+    case reduceQuality = "reduce"    // Reduce quality on battery
+    case pauseOnLow = "pause"        // Pause when battery is low
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ignore: return "Ignore Battery"
+        case .reduceQuality: return "Reduce Quality on Battery"
+        case .pauseOnLow: return "Pause on Low Battery"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .ignore: return "Record at full quality regardless of battery state"
+        case .reduceQuality: return "Automatically reduce quality when on battery power"
+        case .pauseOnLow: return "Pause recording when battery drops below 20%"
+        }
+    }
 }
 
 /// Manages user preferences and application settings with automatic persistence.
@@ -76,6 +181,26 @@ class AppSettings: ObservableObject {
     @AppStorage("showNotifications") var showNotifications: Bool = true
     @AppStorage("bufferSize") var bufferSize: Int = 900 // 15 minutes default
     @AppStorage("recordingQuality") var recordingQuality: RecordingQuality = .medium
+
+    // MARK: - Display Settings (Phase 4)
+
+    @AppStorage("displaySelectionMode") var displaySelectionMode: DisplaySelectionMode = .primary
+    @AppStorage("selectedDisplayID") var selectedDisplayID: UInt32 = 0
+
+    // MARK: - Audio Settings (Phase 4)
+
+    @AppStorage("audioCaptureMode") var audioCaptureMode: AudioCaptureMode = .none
+
+    // MARK: - Battery Settings (Phase 4)
+
+    @AppStorage("batteryMode") var batteryMode: BatteryMode = .ignore
+    @AppStorage("lowBatteryThreshold") var lowBatteryThreshold: Int = 20 // Percent
+
+    // MARK: - Adaptive Quality Settings (Phase 4)
+
+    @AppStorage("adaptiveQualityEnabled") var adaptiveQualityEnabled: Bool = false
+    @AppStorage("cpuThresholdHigh") var cpuThresholdHigh: Int = 80 // Reduce quality above this %
+    @AppStorage("cpuThresholdLow") var cpuThresholdLow: Int = 50 // Restore quality below this %
 
     // Save location as URL
     var saveLocation: URL {
@@ -120,7 +245,12 @@ class AppSettings: ObservableObject {
 
         // Ensure save location exists
         let location = saveLocation
-        try? FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
+            DevCamLogger.settings.debug("Save location directory ensured: \(location.path)")
+        } catch {
+            DevCamLogger.settings.error("Failed to create save location directory: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Validation
@@ -137,6 +267,37 @@ class AppSettings: ObservableObject {
 
         // Check if writable
         return FileManager.default.isWritableFile(atPath: location.path)
+    }
+
+    // MARK: - Quality Degradation
+
+    /// Temporary override for quality during degradation. If set, this takes precedence.
+    private var degradedQuality: RecordingQuality?
+
+    /// The effective quality to use for recording (considers degradation)
+    var effectiveRecordingQuality: RecordingQuality {
+        degradedQuality ?? recordingQuality
+    }
+
+    /// Sets a temporary degraded quality level. Use `resetDegradedQuality()` to restore.
+    func setDegradedQuality(_ quality: RecordingQuality) {
+        degradedQuality = quality
+        DevCamLogger.settings.warning("Quality degraded to \(quality.displayName)")
+        objectWillChange.send()
+    }
+
+    /// Resets degraded quality, restoring the user's configured quality.
+    func resetDegradedQuality() {
+        if degradedQuality != nil {
+            DevCamLogger.settings.info("Quality restored to user setting: \(self.recordingQuality.displayName)")
+            degradedQuality = nil
+            objectWillChange.send()
+        }
+    }
+
+    /// Returns true if quality is currently degraded below user setting.
+    var isQualityDegraded: Bool {
+        degradedQuality != nil
     }
 
     // MARK: - Launch at Login

@@ -10,6 +10,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
+    let bufferManager: BufferManager
 
     let onPreferences: () -> Void
     let onQuit: () -> Void
@@ -36,7 +37,8 @@ struct MenuBarView: View {
         .sheet(isPresented: $showAdvancedWindow) {
             AdvancedClipWindow(
                 recordingManager: recordingManager,
-                clipExporter: clipExporter
+                clipExporter: clipExporter,
+                bufferManager: bufferManager
             )
         }
     }
@@ -45,6 +47,7 @@ struct MenuBarView: View {
 
     private var statusSection: some View {
         VStack(spacing: 4) {
+            // Primary status row
             HStack {
                 statusIndicator
                 Text(statusText)
@@ -52,15 +55,45 @@ struct MenuBarView: View {
                 Spacer()
             }
 
-            if recordingManager.isRecording {
+            // Secondary status indicators
+            if recordingManager.isInRecoveryMode {
                 HStack {
-                    Text(bufferStatusText)
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                    Text("Auto-recovery in progress...")
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                    Spacer()
+                }
+            }
+
+            if recordingManager.isQualityDegraded {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.yellow)
+                    Text("Quality reduced due to system constraints")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                     Spacer()
                 }
             }
 
+            // Buffer status
+            if recordingManager.isRecording {
+                HStack {
+                    Text(bufferStatusText)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Spacer()
+
+                    // Disk space indicator
+                    diskSpaceIndicator
+                }
+            }
+
+            // Export progress
             if clipExporter.isExporting {
                 VStack(spacing: 4) {
                     HStack {
@@ -73,29 +106,97 @@ struct MenuBarView: View {
                         .progressViewStyle(.linear)
                 }
             }
+
+            // Error details (if any)
+            if let error = recordingManager.recordingError {
+                HStack {
+                    Text(errorDescription(error))
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                        .lineLimit(2)
+                    Spacer()
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var diskSpaceIndicator: some View {
+        // This is a placeholder - the actual disk space is checked by BufferManager
+        // We show a warning icon if recording is active (disk space is monitored internally)
+        EmptyView()
     }
 
     private var statusIndicator: some View {
         Circle()
             .fill(statusColor)
             .frame(width: 8, height: 8)
+            .overlay(
+                // Pulsing animation for recording state
+                Circle()
+                    .stroke(statusColor.opacity(0.5), lineWidth: 2)
+                    .scaleEffect(recordingManager.isRecording && recordingManager.recordingError == nil ? 1.5 : 1.0)
+                    .opacity(recordingManager.isRecording && recordingManager.recordingError == nil ? 0 : 1)
+                    .animation(
+                        recordingManager.isRecording && recordingManager.recordingError == nil
+                            ? Animation.easeOut(duration: 1.0).repeatForever(autoreverses: false)
+                            : .default,
+                        value: recordingManager.isRecording
+                    )
+            )
     }
 
     private var statusColor: Color {
-        if let error = recordingManager.recordingError {
+        // Priority: Error > Recovery > Quality Degraded > Recording > Paused
+        if recordingManager.recordingError != nil {
             return .orange
+        }
+        if recordingManager.isInRecoveryMode {
+            return .yellow
+        }
+        if recordingManager.isQualityDegraded {
+            return .yellow
         }
         return recordingManager.isRecording ? .red : .gray
     }
 
     private var statusText: String {
-        if let error = recordingManager.recordingError {
-            return "Error - \(error.localizedDescription)"
+        if recordingManager.isInRecoveryMode {
+            return "Recovering..."
+        }
+        if let _ = recordingManager.recordingError {
+            return "Error"
+        }
+        if recordingManager.isQualityDegraded {
+            return "Recording (Reduced Quality)"
         }
         return recordingManager.isRecording ? "Recording" : "Paused"
+    }
+
+    private func errorDescription(_ error: Error) -> String {
+        if let recordingError = error as? RecordingError {
+            switch recordingError {
+            case .permissionDenied:
+                return "Screen recording permission required"
+            case .noDisplaysAvailable:
+                return "No displays available"
+            case .streamSetupFailed:
+                return "Failed to start screen capture"
+            case .writerSetupFailed:
+                return "Failed to create video file"
+            case .segmentFinalizationFailed:
+                return "Failed to save video segment"
+            case .maxRetriesExceeded:
+                return "Multiple failures - will retry automatically"
+            case .diskSpaceLow:
+                return "Insufficient disk space"
+            case .watchdogTimeout:
+                return "Recording stalled - will retry automatically"
+            }
+        }
+        return error.localizedDescription
     }
 
     private var bufferStatusText: String {
@@ -229,6 +330,7 @@ struct MenuBarView: View {
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
+        bufferManager: bufferManager,
         onPreferences: { },
         onQuit: { }
     )

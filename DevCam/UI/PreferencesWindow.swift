@@ -11,6 +11,8 @@ struct PreferencesWindow: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var permissionManager: PermissionManager
     @ObservedObject var clipExporter: ClipExporter
+    @ObservedObject var healthStats: HealthStats
+    @ObservedObject var recordingManager: RecordingManager
 
     var body: some View {
         TabView {
@@ -19,9 +21,19 @@ struct PreferencesWindow: View {
                     Label("General", systemImage: "gear")
                 }
 
+            RecordingTab(settings: settings, recordingManager: recordingManager)
+                .tabItem {
+                    Label("Recording", systemImage: "record.circle")
+                }
+
             ClipsTab(clipExporter: clipExporter)
                 .tabItem {
                     Label("Clips", systemImage: "film")
+                }
+
+            HealthTab(healthStats: healthStats, recordingManager: recordingManager)
+                .tabItem {
+                    Label("Health", systemImage: "heart.text.square")
                 }
 
             PrivacyTab(permissionManager: permissionManager)
@@ -29,7 +41,7 @@ struct PreferencesWindow: View {
                     Label("Privacy", systemImage: "lock.shield")
                 }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 500, height: 500)
     }
 }
 
@@ -43,10 +55,18 @@ struct PreferencesWindow: View {
         bufferManager: bufferManager,
         settings: settings
     )
+    let healthStats = HealthStats(bufferManager: bufferManager)
+    let recordingManager = RecordingManager(
+        bufferManager: bufferManager,
+        permissionManager: permissionManager,
+        settings: settings
+    )
 
     return PreferencesWindow(
         settings: settings,
         permissionManager: permissionManager,
-        clipExporter: clipExporter
+        clipExporter: clipExporter,
+        healthStats: healthStats,
+        recordingManager: recordingManager
     )
 }

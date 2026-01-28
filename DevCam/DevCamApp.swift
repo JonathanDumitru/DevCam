@@ -7,6 +7,7 @@
 
 import SwiftUI
 import OSLog
+import Combine
 
 @main
 struct DevCamApp: App {
@@ -22,13 +23,18 @@ struct DevCamApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     private let permissionManager = PermissionManager()
-    private var bufferManager: BufferManager!
-    private var recordingManager: RecordingManager!
-    private var clipExporter: ClipExporter!
-    private var keyboardShortcutHandler: KeyboardShortcutHandler!
+    private var bufferManager: BufferManager?
+    private var recordingManager: RecordingManager?
+    private var clipExporter: ClipExporter?
+    private var healthStats: HealthStats?
+    private var keyboardShortcutHandler: KeyboardShortcutHandler?
     private var menuBarPopover: NSPopover?
-    private var settings: AppSettings!
+    private var settings: AppSettings?
     private var preferencesWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
+
+    // Status icon observation
+    private var statusIconCancellables = Set<AnyCancellable>()
 
     var isTestMode: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -73,11 +79,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
         setupKeyboardShortcuts()
 
-        // Start recording automatically
-        startRecording()
+        // Show onboarding on first launch, otherwise start recording
+        if !OnboardingView.hasCompletedOnboarding {
+            showOnboarding()
+        } else {
+            // Start recording automatically
+            startRecording()
+        }
+    }
+
+    // MARK: - Onboarding
+
+    private func showOnboarding() {
+        let onboardingView = OnboardingView(
+            permissionManager: permissionManager,
+            onComplete: { [weak self] in
+                self?.onboardingWindow?.close()
+                self?.onboardingWindow = nil
+                self?.startRecording()
+            }
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+
+        window.title = "Welcome to DevCam"
+        window.center()
+        window.contentView = NSHostingView(rootView: onboardingView)
+        window.isReleasedWhenClosed = false
+
+        onboardingWindow = window
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func startRecording() {
+        guard let recordingManager = recordingManager else {
+            DevCamLogger.recording.error("Cannot start recording: RecordingManager not initialized")
+            return
+        }
+
         Task { @MainActor in
             do {
                 try await recordingManager.startRecording()
@@ -98,8 +144,136 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(statusItemClicked)
             button.target = self
             DevCamLogger.app.info("Status item created")
+
+            // Setup status icon observation
+            setupStatusIconObservation()
         } else {
             DevCamLogger.app.error("Failed to get status item button")
+        }
+    }
+
+    // MARK: - Status Icon Management
+
+    /// Sets up observation of RecordingManager state to update the menubar icon.
+    private func setupStatusIconObservation() {
+        guard let recordingManager = recordingManager else { return }
+
+        // Observe recording state changes
+        recordingManager.$isRecording
+            .combineLatest(
+                recordingManager.$recordingError,
+                recordingManager.$isInRecoveryMode,
+                recordingManager.$isQualityDegraded
+            )
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isRecording, error, isRecovering, isDegraded in
+                self?.updateStatusIcon(
+                    isRecording: isRecording,
+                    hasError: error != nil,
+                    isRecovering: isRecovering,
+                    isDegraded: isDegraded
+                )
+            }
+            .store(in: &statusIconCancellables)
+    }
+
+    /// Updates the menubar icon based on current state.
+    private func updateStatusIcon(isRecording: Bool, hasError: Bool, isRecovering: Bool, isDegraded: Bool) {
+        guard let button = statusItem?.button else { return }
+
+        let iconState = StatusIconState.from(
+            isRecording: isRecording,
+            hasError: hasError,
+            isRecovering: isRecovering,
+            isDegraded: isDegraded
+        )
+
+        button.image = iconState.image
+        button.toolTip = iconState.tooltip
+    }
+
+    /// Represents the different states of the menubar icon.
+    enum StatusIconState {
+        case recording
+        case recordingDegraded
+        case paused
+        case error
+        case recovering
+
+        static func from(isRecording: Bool, hasError: Bool, isRecovering: Bool, isDegraded: Bool) -> StatusIconState {
+            if isRecovering {
+                return .recovering
+            }
+            if hasError {
+                return .error
+            }
+            if isRecording {
+                return isDegraded ? .recordingDegraded : .recording
+            }
+            return .paused
+        }
+
+        var image: NSImage? {
+            let symbolName: String
+            let accessibilityDescription: String
+
+            switch self {
+            case .recording:
+                symbolName = "record.circle.fill"
+                accessibilityDescription = "DevCam - Recording"
+            case .recordingDegraded:
+                symbolName = "record.circle"
+                accessibilityDescription = "DevCam - Recording (Reduced Quality)"
+            case .paused:
+                symbolName = "pause.circle"
+                accessibilityDescription = "DevCam - Paused"
+            case .error:
+                symbolName = "exclamationmark.circle.fill"
+                accessibilityDescription = "DevCam - Error"
+            case .recovering:
+                symbolName = "arrow.clockwise.circle"
+                accessibilityDescription = "DevCam - Recovering"
+            }
+
+            var image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
+
+            // Apply color tint based on state
+            if let baseImage = image {
+                let config = NSImage.SymbolConfiguration(paletteColors: [tintColor])
+                image = baseImage.withSymbolConfiguration(config)
+            }
+
+            return image
+        }
+
+        var tintColor: NSColor {
+            switch self {
+            case .recording:
+                return .systemRed
+            case .recordingDegraded:
+                return .systemYellow
+            case .paused:
+                return .systemGray
+            case .error:
+                return .systemOrange
+            case .recovering:
+                return .systemYellow
+            }
+        }
+
+        var tooltip: String {
+            switch self {
+            case .recording:
+                return "DevCam: Recording"
+            case .recordingDegraded:
+                return "DevCam: Recording (Reduced Quality)"
+            case .paused:
+                return "DevCam: Paused"
+            case .error:
+                return "DevCam: Error - Click for details"
+            case .recovering:
+                return "DevCam: Recovering..."
+            }
         }
     }
 
@@ -133,10 +307,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentSize = NSSize(width: 250, height: 300)
         popover.behavior = .transient
 
+        guard let bufferManager = bufferManager else {
+            DevCamLogger.app.error("Cannot create menubar view - bufferManager not initialized")
+            return
+        }
+
         // Create MenuBarView with validated managers
         let menuView = MenuBarView(
             recordingManager: recordingManager,
             clipExporter: clipExporter,
+            bufferManager: bufferManager,
             onPreferences: { [weak self] in
                 self?.menuBarPopover?.close()
                 self?.showPreferences()
@@ -155,20 +335,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupKeyboardShortcuts() {
         keyboardShortcutHandler = KeyboardShortcutHandler()
-        keyboardShortcutHandler.registerShortcuts(
+        keyboardShortcutHandler?.registerShortcuts(
             onSave5Minutes: { [weak self] in
                 Task { @MainActor [weak self] in
-                    try? await self?.clipExporter.exportClip(duration: 300)
+                    do {
+                        try await self?.clipExporter?.exportClip(duration: 300)
+                        DevCamLogger.export.info("5-minute clip exported via keyboard shortcut")
+                    } catch {
+                        DevCamLogger.export.error("Failed to export 5-minute clip: \(error.localizedDescription)")
+                    }
                 }
             },
             onSave10Minutes: { [weak self] in
                 Task { @MainActor [weak self] in
-                    try? await self?.clipExporter.exportClip(duration: 600)
+                    do {
+                        try await self?.clipExporter?.exportClip(duration: 600)
+                        DevCamLogger.export.info("10-minute clip exported via keyboard shortcut")
+                    } catch {
+                        DevCamLogger.export.error("Failed to export 10-minute clip: \(error.localizedDescription)")
+                    }
                 }
             },
             onSave15Minutes: { [weak self] in
                 Task { @MainActor [weak self] in
-                    try? await self?.clipExporter.exportClip(duration: 900)
+                    do {
+                        try await self?.clipExporter?.exportClip(duration: 900)
+                        DevCamLogger.export.info("15-minute clip exported via keyboard shortcut")
+                    } catch {
+                        DevCamLogger.export.error("Failed to export 15-minute clip: \(error.localizedDescription)")
+                    }
                 }
             }
         )
@@ -177,8 +372,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         DevCamLogger.app.info("Application terminating")
+
+        // Save health stats before termination
+        healthStats?.finalizeSession()
+
         Task { @MainActor in
-            await recordingManager.stopRecording()
+            await recordingManager?.stopRecording()
         }
     }
 
@@ -195,31 +394,56 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// segments once BufferManager is initialized.
     private func setupManagers() {
         settings = AppSettings()
-        assert(settings != nil, "CRITICAL: AppSettings is nil after creation!")
+        guard settings != nil else {
+            DevCamLogger.app.fault("CRITICAL: AppSettings initialization failed")
+            return
+        }
 
         bufferManager = BufferManager()
-        assert(bufferManager != nil, "CRITICAL: BufferManager is nil after creation!")
+        guard bufferManager != nil else {
+            DevCamLogger.app.fault("CRITICAL: BufferManager initialization failed")
+            return
+        }
+
+        guard let settings = settings, let bufferManager = bufferManager else {
+            DevCamLogger.app.fault("CRITICAL: Required managers are nil")
+            return
+        }
 
         recordingManager = RecordingManager(
             bufferManager: bufferManager,
             permissionManager: permissionManager,
             settings: settings
         )
-        assert(recordingManager != nil, "CRITICAL: RecordingManager is nil after creation!")
+        guard recordingManager != nil else {
+            DevCamLogger.app.fault("CRITICAL: RecordingManager initialization failed")
+            return
+        }
 
         clipExporter = ClipExporter(
             bufferManager: bufferManager,
             settings: settings
         )
-        assert(clipExporter != nil, "CRITICAL: ClipExporter is nil after creation!")
+        guard clipExporter != nil else {
+            DevCamLogger.app.fault("CRITICAL: ClipExporter initialization failed")
+            return
+        }
 
-        DevCamLogger.app.info("Managers initialized")
+        // Initialize health stats
+        healthStats = HealthStats(bufferManager: bufferManager)
+        if let healthStats = healthStats, let recordingManager = recordingManager {
+            healthStats.setRecordingManager(recordingManager)
+        }
+
+        DevCamLogger.app.info("Managers initialized successfully")
     }
 
     private func showPreferences() {
         // Verify managers are initialized
         guard let settings = settings,
-              let clipExporter = clipExporter else {
+              let clipExporter = clipExporter,
+              let healthStats = healthStats,
+              let recordingManager = recordingManager else {
             DevCamLogger.app.error("Cannot show preferences - managers not initialized")
             return
         }
@@ -237,7 +461,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let prefsView = PreferencesWindow(
             settings: settings,
             permissionManager: permissionManager,
-            clipExporter: clipExporter
+            clipExporter: clipExporter,
+            healthStats: healthStats,
+            recordingManager: recordingManager
         )
 
         let window = NSWindow(
