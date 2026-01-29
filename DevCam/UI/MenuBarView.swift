@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import CoreMedia
 
 struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
@@ -17,6 +18,7 @@ struct MenuBarView: View {
 
     @State private var selectedDuration: Double = 300 // Default 5 minutes (in seconds)
     @State private var showAdvancedWindow = false
+    @State private var isPreparingPreview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -254,6 +256,26 @@ struct MenuBarView: View {
             .padding(.horizontal, 12)
             .disabled(!canSave())
 
+            // Preview button
+            Button(action: {
+                Task {
+                    await openPreviewWindow()
+                }
+            }) {
+                HStack {
+                    Text("Preview & Trim...")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Image(systemName: "eye")
+                        .font(.system(size: 10))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .disabled(!canSave() || isPreparingPreview)
+            .opacity((canSave() && !isPreparingPreview) ? 1.0 : 0.5)
+
             // Advanced button
             Button(action: {
                 showAdvancedWindow = true
@@ -288,6 +310,29 @@ struct MenuBarView: View {
     private func canSave() -> Bool {
         // Can save if we have any buffer content and not currently exporting
         return recordingManager.bufferDuration > 0 && !clipExporter.isExporting
+    }
+
+    private func openPreviewWindow() async {
+        isPreparingPreview = true
+        defer { isPreparingPreview = false }
+
+        do {
+            guard let previewURL = try await clipExporter.preparePreview(duration: selectedDuration) else {
+                return
+            }
+
+            await MainActor.run {
+                PreviewWindow.show(videoURL: previewURL) { timeRange in
+                    Task {
+                        try await clipExporter.exportClipWithRange(timeRange, from: previewURL)
+                        // Clean up temp file after export
+                        try? FileManager.default.removeItem(at: previewURL)
+                    }
+                }
+            }
+        } catch {
+            // Error handling - ClipExporter will have set exportError
+        }
     }
 
     // MARK: - Settings Section
