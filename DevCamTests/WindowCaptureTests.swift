@@ -401,4 +401,82 @@ final class WindowCaptureTests: XCTestCase {
         let actual6 = 6.0
         XCTAssertFalse(actual6 < target10 * minimumRatio, "6 fps is okay at 10 fps target")
     }
+
+    // MARK: - Integration Tests
+
+    @MainActor
+    func testWindowSelectionPersistence() async {
+        let settings = AppSettings()
+        settings.clearWindowSelection()
+
+        let windows = [
+            WindowSelection(windowID: 1, ownerName: "App1", windowTitle: "Title1", isPrimary: true),
+            WindowSelection(windowID: 2, ownerName: "App2", windowTitle: "Title2", isPrimary: false)
+        ]
+
+        settings.updateWindowSelection(windows)
+
+        XCTAssertEqual(settings.selectedWindows.count, 2)
+        XCTAssertEqual(settings.selectedWindows[0].windowID, 1)
+        XCTAssertTrue(settings.selectedWindows[0].isPrimary)
+    }
+
+    @MainActor
+    func testCaptureModeToggle() async {
+        let settings = AppSettings()
+
+        settings.captureMode = .display
+        XCTAssertEqual(settings.captureMode, .display)
+
+        settings.captureMode = .windows
+        XCTAssertEqual(settings.captureMode, .windows)
+    }
+
+    @MainActor
+    func testWindowCaptureManagerIntegration() async {
+        let settings = AppSettings()
+        let manager = WindowCaptureManager(settings: settings)
+
+        // Verify manager is properly initialized
+        XCTAssertTrue(manager.selectedWindows.isEmpty)
+        XCTAssertFalse(manager.isCapturing)
+        XCTAssertNil(manager.primaryWindow)
+    }
+
+    @MainActor
+    func testCompositorOutputSizeConfiguration() async {
+        let compositor = WindowCompositor()
+
+        // Test default output size
+        XCTAssertEqual(compositor.outputSize.width, 1920)
+        XCTAssertEqual(compositor.outputSize.height, 1080)
+
+        // Test custom output size
+        compositor.outputSize = CGSize(width: 1280, height: 720)
+        XCTAssertEqual(compositor.outputSize.width, 1280)
+        XCTAssertEqual(compositor.outputSize.height, 720)
+    }
+
+    @MainActor
+    func testCaptureModeSettingsPersistence() async {
+        let settings = AppSettings()
+
+        // Set to windows mode
+        settings.captureMode = .windows
+
+        // Verify it persisted
+        XCTAssertEqual(settings.captureMode, .windows)
+
+        // Set back to display
+        settings.captureMode = .display
+        XCTAssertEqual(settings.captureMode, .display)
+    }
+
+    @MainActor
+    func testWindowCountWarningThreshold() async {
+        let settings = AppSettings()
+
+        // Verify the threshold constant exists and has expected value
+        XCTAssertEqual(settings.windowCountWarningThreshold, 4)
+    }
 }
