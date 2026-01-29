@@ -291,10 +291,43 @@ class RecordingManager: NSObject, ObservableObject {
     func setWindowCaptureManager(_ manager: WindowCaptureManager) {
         self.windowCaptureManager = manager
 
+        // Subscribe to composited frames
         manager.onCompositedFrame = { [weak self] buffer in
             Task { @MainActor in
                 await self?.processWindowCaptureFrame(buffer)
             }
+        }
+
+        // Subscribe to all-windows-closed fallback
+        manager.onAllWindowsClosed = { [weak self] in
+            Task { @MainActor in
+                await self?.fallbackToDisplayCapture()
+            }
+        }
+    }
+
+    /// Switches from window capture to display capture when all captured windows are closed.
+    /// This maintains recording continuity by seamlessly transitioning to display capture
+    /// without creating a new segment.
+    private func fallbackToDisplayCapture() async {
+        guard isRecording else { return }
+
+        DevCamLogger.recording.info("Falling back to display capture - all windows closed")
+
+        // Switch capture mode
+        settings.captureMode = .display
+
+        // Stop window capture
+        await windowCaptureManager?.stopCapture()
+
+        // Start display capture without breaking the current segment
+        // The existing AVAssetWriter can continue receiving frames
+        do {
+            try await setupDisplayCapture()
+            DevCamLogger.recording.info("Successfully switched to display capture")
+        } catch {
+            DevCamLogger.recording.error("Failed to fall back to display capture: \(error.localizedDescription)")
+            recordingError = error
         }
     }
 

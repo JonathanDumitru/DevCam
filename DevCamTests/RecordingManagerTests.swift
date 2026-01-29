@@ -325,4 +325,106 @@ final class RecordingManagerTests: XCTestCase {
         // Window capture manager should also be stopped
         XCTAssertFalse(windowCaptureManager.isCapturing, "Window capture should be stopped")
     }
+
+    // MARK: - Display Fallback Tests
+
+    func testSetWindowCaptureManagerSubscribesToAllWindowsClosedCallback() async throws {
+        let settings = AppSettings()
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // After setting the window capture manager, the onAllWindowsClosed callback should be set
+        XCTAssertNotNil(windowCaptureManager.onAllWindowsClosed, "onAllWindowsClosed callback should be subscribed")
+    }
+
+    func testFallbackToDisplayCaptureWhenNotRecording() async throws {
+        // When not recording, fallback should be a no-op (no crash)
+        let settings = AppSettings()
+        settings.captureMode = .windows
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        XCTAssertFalse(recordingManager.isRecording, "Should not be recording initially")
+
+        // Trigger the fallback callback - should not crash when not recording
+        windowCaptureManager.onAllWindowsClosed?()
+
+        // Give time for any async operations
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+
+        // Should still not be recording (fallback is no-op when not recording)
+        XCTAssertFalse(recordingManager.isRecording, "Should still not be recording")
+    }
+
+    func testFallbackSwitchesCaptureModeToDisplay() async throws {
+        let settings = AppSettings()
+        settings.captureMode = .windows
+
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        newRecordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // Start recording (in test mode)
+        try await newRecordingManager.startRecording()
+        XCTAssertTrue(newRecordingManager.isRecording, "Should be recording")
+
+        // Trigger fallback
+        windowCaptureManager.onAllWindowsClosed?()
+
+        // Give time for async fallback to complete
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+
+        // Capture mode should be switched to display
+        XCTAssertEqual(settings.captureMode, .display, "Capture mode should switch to display after fallback")
+
+        // Recording should continue (not stopped)
+        XCTAssertTrue(newRecordingManager.isRecording, "Recording should continue after fallback")
+
+        await newRecordingManager.stopRecording()
+    }
+
+    func testFallbackDoesNotCreateNewSegment() async throws {
+        // This test verifies that fallback maintains seamless continuity
+        // by not calling startNewSegment()
+        let settings = AppSettings()
+        settings.captureMode = .windows
+
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        newRecordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // Start recording
+        try await newRecordingManager.startRecording()
+
+        // Wait for initial segment
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+
+        let segmentCountBefore = bufferManager.getAllSegments().count
+
+        // Trigger fallback
+        windowCaptureManager.onAllWindowsClosed?()
+
+        // Give time for fallback to complete
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+
+        let segmentCountAfter = bufferManager.getAllSegments().count
+
+        // Segment count should not increase immediately from fallback
+        // (Only normal segment rotation should create new segments)
+        XCTAssertEqual(segmentCountBefore, segmentCountAfter, "Fallback should not create a new segment")
+
+        await newRecordingManager.stopRecording()
+    }
 }

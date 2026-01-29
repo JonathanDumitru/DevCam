@@ -29,6 +29,7 @@ class WindowCaptureManager: NSObject, ObservableObject {
     // MARK: - Callbacks
 
     var onFrameCaptured: ((CVPixelBuffer, CGWindowID) -> Void)?
+    var onAllWindowsClosed: (() -> Void)?
 
     // MARK: - Compositor
 
@@ -248,6 +249,12 @@ class WindowCaptureManager: NSObject, ObservableObject {
         settings.updateWindowSelection(selectedWindows)
 
         DevCamLogger.recording.info("Window \(windowID) closed, removed from capture")
+
+        // Trigger fallback callback when all windows are closed
+        if selectedWindows.isEmpty {
+            DevCamLogger.recording.info("All windows closed, triggering fallback")
+            onAllWindowsClosed?()
+        }
     }
 
     // MARK: - Warnings
