@@ -31,6 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var menubarIconManager: MenubarIconManager?
     private var menuBarPopover: NSPopover?
     private var settings: AppSettings?
+    private var windowCaptureManager: WindowCaptureManager?
     private var preferencesWindow: NSWindow?
     private var onboardingWindow: NSWindow?
 
@@ -179,7 +180,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Verify managers exist
         guard let recordingManager = recordingManager,
-              let clipExporter = clipExporter else {
+              let clipExporter = clipExporter,
+              let windowCaptureManager = windowCaptureManager,
+              let settings = settings else {
             DevCamLogger.app.error("Cannot create menubar view - managers not initialized")
             return
         }
@@ -199,6 +202,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             recordingManager: recordingManager,
             clipExporter: clipExporter,
             bufferManager: bufferManager,
+            windowCaptureManager: windowCaptureManager,
+            settings: settings,
+            onSelectWindows: { [weak self] in
+                self?.menuBarPopover?.close()
+                self?.showWindowSelectionPanel()
+            },
             onPreferences: { [weak self] in
                 self?.menuBarPopover?.close()
                 self?.showPreferences()
@@ -281,6 +290,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        windowCaptureManager = WindowCaptureManager(settings: settings)
+        guard windowCaptureManager != nil else {
+            DevCamLogger.app.fault("CRITICAL: WindowCaptureManager initialization failed")
+            return
+        }
+
         // Initialize health stats
         healthStats = HealthStats(bufferManager: bufferManager)
         if let healthStats = healthStats, let recordingManager = recordingManager {
@@ -348,5 +363,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Show window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showWindowSelectionPanel() {
+        // TODO: Implement window selection panel
+        // This will be implemented in a future task
+        DevCamLogger.app.info("Window selection panel requested")
     }
 }

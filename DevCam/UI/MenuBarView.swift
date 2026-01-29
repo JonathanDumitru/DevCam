@@ -12,6 +12,9 @@ struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
     let bufferManager: BufferManager
+    @ObservedObject var windowCaptureManager: WindowCaptureManager
+    let settings: AppSettings
+    let onSelectWindows: () -> Void
 
     let onPreferences: () -> Void
     let onQuit: () -> Void
@@ -24,6 +27,11 @@ struct MenuBarView: View {
         VStack(spacing: 0) {
             // Status section
             statusSection
+
+            Divider()
+
+            // Capture mode
+            captureModeSection
 
             Divider()
 
@@ -122,6 +130,86 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    // MARK: - Capture Mode Section
+
+    private var captureModeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Capture Mode")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+
+            VStack(spacing: 4) {
+                // Display option
+                Button(action: {
+                    settings.captureMode = .display
+                }) {
+                    HStack {
+                        Image(systemName: settings.captureMode == .display ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(settings.captureMode == .display ? .accentColor : .secondary)
+                        Text("Display")
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+                // Windows option
+                Button(action: {
+                    settings.captureMode = .windows
+                }) {
+                    HStack {
+                        Image(systemName: settings.captureMode == .windows ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(settings.captureMode == .windows ? .accentColor : .secondary)
+                        Text("Windows")
+                        if !windowCaptureManager.selectedWindows.isEmpty {
+                            Text("(\(windowCaptureManager.selectedWindows.count))")
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+            }
+
+            // Select Windows button (when in windows mode)
+            if settings.captureMode == .windows {
+                Button(action: {
+                    onSelectWindows()
+                }) {
+                    HStack {
+                        Text("Select Windows...")
+                            .font(.system(size: 12))
+                        Spacer()
+                        Text("\u{2318}\u{21E7}W")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+
+                // Warning for high window count
+                if windowCaptureManager.selectedWindows.count > settings.windowCountWarningThreshold {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 10))
+                        Text("\(windowCaptureManager.selectedWindows.count) windows - quality may degrade")
+                            .font(.system(size: 10))
+                            .foregroundColor(.yellow)
+                    }
+                    .padding(.horizontal, 12)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     @ViewBuilder
@@ -371,11 +459,15 @@ struct MenuBarView: View {
         bufferManager: bufferManager,
         settings: settings
     )
+    let windowCaptureManager = WindowCaptureManager(settings: settings)
 
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
         bufferManager: bufferManager,
+        windowCaptureManager: windowCaptureManager,
+        settings: settings,
+        onSelectWindows: { },
         onPreferences: { },
         onQuit: { }
     )
