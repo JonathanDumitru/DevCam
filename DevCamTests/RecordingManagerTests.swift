@@ -225,4 +225,104 @@ final class RecordingManagerTests: XCTestCase {
         // This is more of a placeholder for manual testing
         XCTAssertTrue(true, "Memory test completed")
     }
+
+    // MARK: - Window Capture Integration Tests
+
+    func testSetWindowCaptureManager() async throws {
+        let settings = AppSettings()
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // Setting the window capture manager should succeed without error
+        // The onCompositedFrame callback should be set
+        XCTAssertNotNil(windowCaptureManager.onCompositedFrame, "Composited frame callback should be set")
+    }
+
+    func testCaptureModeDefaultsToDisplay() async throws {
+        // Remove any persisted value to test the actual default
+        UserDefaults.standard.removeObject(forKey: "captureMode")
+        let settings = AppSettings()
+        XCTAssertEqual(settings.captureMode, .display, "Default capture mode should be display")
+    }
+
+    func testCaptureModeCanBeSetToWindows() async throws {
+        let settings = AppSettings()
+        settings.captureMode = .windows
+        XCTAssertEqual(settings.captureMode, .windows, "Capture mode should be settable to windows")
+    }
+
+    func testDisplayCaptureWorksWithDisplayMode() async throws {
+        // Default mode is display, so recording should use display capture
+        let settings = AppSettings()
+        XCTAssertEqual(settings.captureMode, .display)
+
+        // In test mode, recording should start successfully
+        try await recordingManager.startRecording()
+        XCTAssertTrue(recordingManager.isRecording, "Recording should start in display mode")
+
+        await recordingManager.stopRecording()
+    }
+
+    func testWindowCaptureFallsBackToDisplayWhenNoWindowsSelected() async throws {
+        // Set capture mode to windows but don't select any windows
+        let settings = AppSettings()
+        settings.captureMode = .windows
+        settings.clearWindowSelection()
+
+        // Create new recording manager with these settings
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        newRecordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // Should fall back to display capture when no windows selected
+        // In test mode, this should succeed
+        try await newRecordingManager.startRecording()
+        XCTAssertTrue(newRecordingManager.isRecording, "Recording should fall back to display mode")
+
+        await newRecordingManager.stopRecording()
+    }
+
+    func testWindowCaptureFallsBackToDisplayWhenNoManager() async throws {
+        // Set capture mode to windows but don't set a window capture manager
+        let settings = AppSettings()
+        settings.captureMode = .windows
+        settings.updateWindowSelection([
+            WindowSelection(windowID: 123, ownerName: "TestApp", windowTitle: "Test", isPrimary: true)
+        ])
+
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        // Don't set window capture manager - should fall back to display
+        // In test mode, this should succeed
+        try await newRecordingManager.startRecording()
+        XCTAssertTrue(newRecordingManager.isRecording, "Recording should fall back to display mode when no manager")
+
+        await newRecordingManager.stopRecording()
+    }
+
+    func testStopRecordingStopsWindowCapture() async throws {
+        let settings = AppSettings()
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        try await recordingManager.startRecording()
+        XCTAssertTrue(recordingManager.isRecording)
+
+        await recordingManager.stopRecording()
+        XCTAssertFalse(recordingManager.isRecording)
+
+        // Window capture manager should also be stopped
+        XCTAssertFalse(windowCaptureManager.isCapturing, "Window capture should be stopped")
+    }
 }
