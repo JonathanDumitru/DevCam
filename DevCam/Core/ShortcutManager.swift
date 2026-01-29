@@ -12,6 +12,10 @@ import Carbon
 import Combine
 import OSLog
 
+extension Notification.Name {
+    static let openWindowPicker = Notification.Name("openWindowPicker")
+}
+
 @MainActor
 class ShortcutManager: ObservableObject {
 
@@ -142,6 +146,12 @@ class ShortcutManager: ObservableObject {
                     }
                 }
             }
+
+        case .selectWindows:
+            // Window selection is handled by the UI layer
+            // This shortcut triggers the window picker to open
+            NotificationCenter.default.post(name: .openWindowPicker, object: nil)
+            DevCamLogger.app.info("Window picker requested via shortcut")
         }
     }
 

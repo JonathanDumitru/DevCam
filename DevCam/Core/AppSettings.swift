@@ -188,6 +188,7 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
     case exportLast1Minute = "export1m"
     case exportLast5Minutes = "export5m"
     case togglePauseResume = "togglePause"
+    case selectWindows = "selectWindows"
 
     var id: String { rawValue }
 
@@ -197,6 +198,7 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .exportLast1Minute: return "Export Last 1 Minute"
         case .exportLast5Minutes: return "Export Last 5 Minutes"
         case .togglePauseResume: return "Pause/Resume Recording"
+        case .selectWindows: return "Select Windows"
         }
     }
 
@@ -206,6 +208,7 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .exportLast1Minute: return 46   // M key
         case .exportLast5Minutes: return 37  // L key
         case .togglePauseResume: return 35   // P key
+        case .selectWindows: return 13  // W key
         }
     }
 
@@ -219,6 +222,7 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .exportLast1Minute: return 60
         case .exportLast5Minutes: return 300
         case .togglePauseResume: return nil
+        case .selectWindows: return nil
         }
     }
 }
@@ -360,6 +364,39 @@ class AppSettings: ObservableObject {
     func resetShortcutsToDefaults() {
         shortcutConfigs = ShortcutAction.allCases.map { ShortcutConfig.defaultConfig(for: $0) }
     }
+
+    // MARK: - Capture Mode Settings
+
+    @AppStorage("captureMode") var captureMode: CaptureMode = .display
+
+    @AppStorage("selectedWindowsData") private var selectedWindowsData: Data = Data()
+
+    var selectedWindows: [WindowSelection] {
+        get {
+            guard !selectedWindowsData.isEmpty,
+                  let windows = try? JSONDecoder().decode([WindowSelection].self, from: selectedWindowsData) else {
+                return []
+            }
+            return windows
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                selectedWindowsData = data
+                objectWillChange.send()
+            }
+        }
+    }
+
+    func updateWindowSelection(_ windows: [WindowSelection]) {
+        selectedWindows = windows
+    }
+
+    func clearWindowSelection() {
+        selectedWindows = []
+    }
+
+    /// Soft limit warning threshold for window count
+    let windowCountWarningThreshold: Int = 4
 
     // Save location as URL
     var saveLocation: URL {
