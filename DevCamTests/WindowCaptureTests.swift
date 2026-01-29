@@ -111,4 +111,111 @@ final class WindowCaptureTests: XCTestCase {
 
         XCTAssertEqual(selections, decoded)
     }
+
+    // MARK: - WindowCompositor Layout Tests
+
+    @MainActor
+    func testCompositorSingleWindowLayout() async {
+        let compositor = WindowCompositor()
+        compositor.outputSize = CGSize(width: 1920, height: 1080)
+
+        let layout = compositor.calculateLayout(
+            primaryWindowID: 100,
+            secondaryWindowIDs: []
+        )
+
+        XCTAssertEqual(layout.count, 1)
+        XCTAssertEqual(layout[100], CGRect(x: 0, y: 0, width: 1920, height: 1080))
+    }
+
+    @MainActor
+    func testCompositorPiPLayoutTwoWindows() async {
+        let compositor = WindowCompositor()
+        compositor.outputSize = CGSize(width: 1920, height: 1080)
+
+        let layout = compositor.calculateLayout(
+            primaryWindowID: 100,
+            secondaryWindowIDs: [200]
+        )
+
+        XCTAssertEqual(layout.count, 2)
+        XCTAssertNotNil(layout[100])
+        XCTAssertNotNil(layout[200])
+
+        // Secondary should be in bottom-right corner (default first corner)
+        let secondary = layout[200]!
+        XCTAssertGreaterThan(secondary.minX, 1000) // Right side
+        XCTAssertLessThan(secondary.minY, 300) // Bottom (CoreGraphics origin is bottom-left)
+    }
+
+    @MainActor
+    func testCompositorPiPLayoutThreeWindows() async {
+        let compositor = WindowCompositor()
+        compositor.outputSize = CGSize(width: 1920, height: 1080)
+
+        let layout = compositor.calculateLayout(
+            primaryWindowID: 100,
+            secondaryWindowIDs: [200, 300]
+        )
+
+        XCTAssertEqual(layout.count, 3)
+
+        // First secondary in bottom-right, second in bottom-left
+        let secondary1 = layout[200]!
+        let secondary2 = layout[300]!
+
+        XCTAssertGreaterThan(secondary1.minX, secondary2.minX) // First is on right
+    }
+
+    @MainActor
+    func testCompositorPiPLayoutFourWindows() async {
+        let compositor = WindowCompositor()
+        compositor.outputSize = CGSize(width: 1920, height: 1080)
+
+        let layout = compositor.calculateLayout(
+            primaryWindowID: 100,
+            secondaryWindowIDs: [200, 300, 400]
+        )
+
+        XCTAssertEqual(layout.count, 4)
+
+        // All four windows should have layouts
+        XCTAssertNotNil(layout[100])
+        XCTAssertNotNil(layout[200])
+        XCTAssertNotNil(layout[300])
+        XCTAssertNotNil(layout[400])
+    }
+
+    @MainActor
+    func testCompositorSecondaryWindowSize() async {
+        let compositor = WindowCompositor()
+        compositor.outputSize = CGSize(width: 1920, height: 1080)
+
+        let layout = compositor.calculateLayout(
+            primaryWindowID: 100,
+            secondaryWindowIDs: [200]
+        )
+
+        let secondary = layout[200]!
+
+        // Secondary should be 25% of output size
+        XCTAssertEqual(secondary.width, 1920 * 0.25, accuracy: 1.0)
+        XCTAssertEqual(secondary.height, 1080 * 0.25, accuracy: 1.0)
+    }
+
+    @MainActor
+    func testCompositorNoPrimaryWindow() async {
+        let compositor = WindowCompositor()
+        compositor.outputSize = CGSize(width: 1920, height: 1080)
+
+        let layout = compositor.calculateLayout(
+            primaryWindowID: nil,
+            secondaryWindowIDs: [200, 300]
+        )
+
+        // Should still layout secondary windows
+        XCTAssertEqual(layout.count, 2)
+        XCTAssertNotNil(layout[200])
+        XCTAssertNotNil(layout[300])
+    }
 }
