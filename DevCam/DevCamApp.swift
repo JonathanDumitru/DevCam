@@ -28,13 +28,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var clipExporter: ClipExporter?
     private var healthStats: HealthStats?
     private var shortcutManager: ShortcutManager?
+    private var menubarIconManager: MenubarIconManager?
     private var menuBarPopover: NSPopover?
     private var settings: AppSettings?
     private var preferencesWindow: NSWindow?
     private var onboardingWindow: NSWindow?
-
-    // Status icon observation
-    private var statusIconCancellables = Set<AnyCancellable>()
 
     var isTestMode: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -143,137 +141,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "DevCam")
             button.action = #selector(statusItemClicked)
             button.target = self
-            DevCamLogger.app.info("Status item created")
 
-            // Setup status icon observation
-            setupStatusIconObservation()
-        } else {
-            DevCamLogger.app.error("Failed to get status item button")
-        }
-    }
-
-    // MARK: - Status Icon Management
-
-    /// Sets up observation of RecordingManager state to update the menubar icon.
-    private func setupStatusIconObservation() {
-        guard let recordingManager = recordingManager else { return }
-
-        // Observe recording state changes
-        recordingManager.$isRecording
-            .combineLatest(
-                recordingManager.$recordingError,
-                recordingManager.$isInRecoveryMode,
-                recordingManager.$isQualityDegraded
-            )
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] isRecording, error, isRecovering, isDegraded in
-                self?.updateStatusIcon(
-                    isRecording: isRecording,
-                    hasError: error != nil,
-                    isRecovering: isRecovering,
-                    isDegraded: isDegraded
+            // Configure menubar icon manager
+            if let button = statusItem?.button,
+               let recordingManager = recordingManager,
+               let clipExporter = clipExporter {
+                menubarIconManager?.configure(
+                    statusButton: button,
+                    recordingManager: recordingManager,
+                    clipExporter: clipExporter
                 )
             }
-            .store(in: &statusIconCancellables)
-    }
 
-    /// Updates the menubar icon based on current state.
-    private func updateStatusIcon(isRecording: Bool, hasError: Bool, isRecovering: Bool, isDegraded: Bool) {
-        guard let button = statusItem?.button else { return }
-
-        let iconState = StatusIconState.from(
-            isRecording: isRecording,
-            hasError: hasError,
-            isRecovering: isRecovering,
-            isDegraded: isDegraded
-        )
-
-        button.image = iconState.image
-        button.toolTip = iconState.tooltip
-    }
-
-    /// Represents the different states of the menubar icon.
-    enum StatusIconState {
-        case recording
-        case recordingDegraded
-        case paused
-        case error
-        case recovering
-
-        static func from(isRecording: Bool, hasError: Bool, isRecovering: Bool, isDegraded: Bool) -> StatusIconState {
-            if isRecovering {
-                return .recovering
-            }
-            if hasError {
-                return .error
-            }
-            if isRecording {
-                return isDegraded ? .recordingDegraded : .recording
-            }
-            return .paused
-        }
-
-        var image: NSImage? {
-            let symbolName: String
-            let accessibilityDescription: String
-
-            switch self {
-            case .recording:
-                symbolName = "record.circle.fill"
-                accessibilityDescription = "DevCam - Recording"
-            case .recordingDegraded:
-                symbolName = "record.circle"
-                accessibilityDescription = "DevCam - Recording (Reduced Quality)"
-            case .paused:
-                symbolName = "pause.circle"
-                accessibilityDescription = "DevCam - Paused"
-            case .error:
-                symbolName = "exclamationmark.circle.fill"
-                accessibilityDescription = "DevCam - Error"
-            case .recovering:
-                symbolName = "arrow.clockwise.circle"
-                accessibilityDescription = "DevCam - Recovering"
-            }
-
-            var image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
-
-            // Apply color tint based on state
-            if let baseImage = image {
-                let config = NSImage.SymbolConfiguration(paletteColors: [tintColor])
-                image = baseImage.withSymbolConfiguration(config)
-            }
-
-            return image
-        }
-
-        var tintColor: NSColor {
-            switch self {
-            case .recording:
-                return .systemRed
-            case .recordingDegraded:
-                return .systemYellow
-            case .paused:
-                return .systemGray
-            case .error:
-                return .systemOrange
-            case .recovering:
-                return .systemYellow
-            }
-        }
-
-        var tooltip: String {
-            switch self {
-            case .recording:
-                return "DevCam: Recording"
-            case .recordingDegraded:
-                return "DevCam: Recording (Reduced Quality)"
-            case .paused:
-                return "DevCam: Paused"
-            case .error:
-                return "DevCam: Error - Click for details"
-            case .recovering:
-                return "DevCam: Recovering..."
-            }
+            DevCamLogger.app.info("Status item created")
+        } else {
+            DevCamLogger.app.error("Failed to get status item button")
         }
     }
 
@@ -340,6 +222,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         DevCamLogger.app.info("Application terminating")
+
+        menubarIconManager?.stopAnimations()
 
         // Save health stats before termination
         healthStats?.finalizeSession()
@@ -410,6 +294,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
            let clipExporter = clipExporter {
             shortcutManager.setManagers(recordingManager: recordingManager, clipExporter: clipExporter)
         }
+
+        // Initialize menubar icon manager
+        menubarIconManager = MenubarIconManager()
 
         DevCamLogger.app.info("Managers initialized successfully")
     }
