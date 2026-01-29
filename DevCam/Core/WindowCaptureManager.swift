@@ -30,6 +30,11 @@ class WindowCaptureManager: NSObject, ObservableObject {
 
     var onFrameCaptured: ((CVPixelBuffer, CGWindowID) -> Void)?
 
+    // MARK: - Compositor
+
+    private let compositor = WindowCompositor()
+    var onCompositedFrame: ((CVPixelBuffer) -> Void)?
+
     // MARK: - Configuration
 
     private let settings: AppSettings
@@ -160,6 +165,7 @@ class WindowCaptureManager: NSObject, ObservableObject {
 
         windowStreams.removeAll()
         streamOutputs.removeAll()
+        compositor.clearAllFrames()
         isCapturing = false
     }
 
@@ -170,7 +176,7 @@ class WindowCaptureManager: NSObject, ObservableObject {
         let filter = SCContentFilter(desktopIndependentWindow: window)
 
         let output = WindowStreamOutput(windowID: window.windowID) { [weak self] buffer, windowID in
-            self?.onFrameCaptured?(buffer, windowID)
+            self?.handleCapturedFrame(buffer, from: windowID)
         }
 
         let stream = SCStream(filter: filter, configuration: config, delegate: nil)
@@ -199,6 +205,21 @@ class WindowCaptureManager: NSObject, ObservableObject {
         return config
     }
 
+    private func handleCapturedFrame(_ buffer: CVPixelBuffer, from windowID: CGWindowID) {
+        compositor.updateFrame(buffer, for: windowID)
+
+        // Composite and emit
+        let primaryID = primaryWindow?.windowID
+        let secondaryIDs = secondaryWindows.map { $0.windowID }
+
+        if let composited = compositor.compositeFrames(
+            primaryWindowID: primaryID,
+            secondaryWindowIDs: secondaryIDs
+        ) {
+            onCompositedFrame?(composited)
+        }
+    }
+
     // MARK: - Window Lifecycle
 
     func handleWindowClosed(_ windowID: CGWindowID) async {
@@ -212,6 +233,8 @@ class WindowCaptureManager: NSObject, ObservableObject {
             windowStreams.removeValue(forKey: windowID)
             streamOutputs.removeValue(forKey: windowID)
         }
+
+        compositor.clearFrame(for: windowID)
 
         // Remove from selection
         let wasPrimary = selectedWindows.first { $0.windowID == windowID }?.isPrimary ?? false
@@ -247,6 +270,10 @@ class WindowCaptureManager: NSObject, ObservableObject {
 
     var windowCount: Int {
         selectedWindows.count
+    }
+
+    func setOutputSize(_ size: CGSize) {
+        compositor.outputSize = size
     }
 }
 
