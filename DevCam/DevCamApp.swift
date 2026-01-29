@@ -34,6 +34,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowCaptureManager: WindowCaptureManager?
     private var preferencesWindow: NSWindow?
     private var onboardingWindow: NSWindow?
+    private var overlayWindow: NSWindow?
+    private var notificationObservers: [NSObjectProtocol] = []
 
     var isTestMode: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -77,6 +79,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup UI
         setupStatusItem()
         setupKeyboardShortcuts()
+        setupNotificationObservers()
 
         // Show onboarding on first launch, otherwise start recording
         if !OnboardingView.hasCompletedOnboarding {
@@ -234,6 +237,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menubarIconManager?.stopAnimations()
 
+        // Remove notification observers
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        notificationObservers.removeAll()
+
         // Save health stats before termination
         healthStats?.finalizeSession()
 
@@ -366,8 +375,67 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showWindowSelectionPanel() {
-        // TODO: Implement window selection panel
-        // This will be implemented in a future task
-        DevCamLogger.app.info("Window selection panel requested")
+        showWindowSelectionOverlay()
+    }
+
+    // MARK: - Window Selection Overlay
+
+    private func setupNotificationObservers() {
+        // Observe keyboard shortcut for opening window picker
+        let observer = NotificationCenter.default.addObserver(
+            forName: .openWindowPicker,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.showWindowSelectionOverlay()
+        }
+        notificationObservers.append(observer)
+        DevCamLogger.app.info("Notification observers registered")
+    }
+
+    func showWindowSelectionOverlay() {
+        guard let windowCaptureManager = windowCaptureManager,
+              let settings = settings else {
+            DevCamLogger.app.error("Cannot show window selection: managers not initialized")
+            return
+        }
+
+        // Close any existing overlay
+        overlayWindow?.close()
+
+        let overlay = WindowSelectionOverlay(
+            windowCaptureManager: windowCaptureManager,
+            settings: settings,
+            onDismiss: { [weak self] in
+                self?.dismissWindowSelectionOverlay()
+            }
+        )
+
+        let hostingView = NSHostingView(rootView: overlay)
+
+        // Create borderless full-screen window
+        let window = NSWindow(
+            contentRect: NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1920, height: 1080),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hostingView
+        window.level = .floating
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.makeKeyAndOrderFront(nil)
+
+        // Ensure the window accepts keyboard events
+        window.makeFirstResponder(hostingView)
+
+        overlayWindow = window
+        DevCamLogger.app.info("Window selection overlay shown")
+    }
+
+    private func dismissWindowSelectionOverlay() {
+        overlayWindow?.close()
+        overlayWindow = nil
+        DevCamLogger.app.info("Window selection overlay dismissed")
     }
 }

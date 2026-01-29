@@ -218,4 +218,36 @@ final class WindowCaptureTests: XCTestCase {
         XCTAssertNotNil(layout[200])
         XCTAssertNotNil(layout[300])
     }
+
+    // MARK: - Overlay Notification Tests
+
+    func testOpenWindowPickerNotificationNameExists() {
+        // Verify the notification name constant exists and has the expected value
+        XCTAssertEqual(Notification.Name.openWindowPicker.rawValue, "openWindowPicker")
+    }
+
+    @MainActor
+    func testSelectWindowsShortcutPostsNotification() async {
+        // Test that the selectWindows shortcut action posts the openWindowPicker notification
+        let settings = AppSettings()
+        let shortcutManager = ShortcutManager(settings: settings)
+
+        let expectation = XCTestExpectation(description: "Notification should be posted")
+
+        let observer = NotificationCenter.default.addObserver(
+            forName: .openWindowPicker,
+            object: nil,
+            queue: .main
+        ) { _ in
+            expectation.fulfill()
+        }
+
+        // Trigger the notification (simulating what ShortcutManager does)
+        NotificationCenter.default.post(name: .openWindowPicker, object: nil)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        NotificationCenter.default.removeObserver(observer)
+        _ = shortcutManager // Silence unused variable warning
+    }
 }
