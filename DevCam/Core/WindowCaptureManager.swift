@@ -40,6 +40,13 @@ class WindowCaptureManager: NSObject, ObservableObject {
 
     private let settings: AppSettings
 
+    // MARK: - Performance Monitoring
+
+    private var frameCount: Int = 0
+    private var lastFrameRateCheck: Date = Date()
+    private let frameRateCheckInterval: TimeInterval = 10.0
+    private let minimumAcceptableFpsRatio: Double = 0.5  // Warn if fps drops below 50% of target
+
     // MARK: - Initialization
 
     init(settings: AppSettings) {
@@ -136,6 +143,7 @@ class WindowCaptureManager: NSObject, ObservableObject {
             return
         }
 
+        resetPerformanceCounters()
         await refreshAvailableWindows()
 
         for selection in selectedWindows {
@@ -167,6 +175,7 @@ class WindowCaptureManager: NSObject, ObservableObject {
         windowStreams.removeAll()
         streamOutputs.removeAll()
         compositor.clearAllFrames()
+        resetPerformanceCounters()
         isCapturing = false
     }
 
@@ -207,6 +216,7 @@ class WindowCaptureManager: NSObject, ObservableObject {
     }
 
     private func handleCapturedFrame(_ buffer: CVPixelBuffer, from windowID: CGWindowID) {
+        trackFrameForPerformance()
         compositor.updateFrame(buffer, for: windowID)
 
         // Composite and emit
@@ -263,6 +273,39 @@ class WindowCaptureManager: NSObject, ObservableObject {
         if selectedWindows.count > settings.windowCountWarningThreshold {
             DevCamLogger.recording.warning("High window count (\(self.selectedWindows.count)) may affect performance")
         }
+    }
+
+    // MARK: - Performance Tracking
+
+    private func trackFrameForPerformance() {
+        frameCount += 1
+        checkFrameRate()
+    }
+
+    private func checkFrameRate() {
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastFrameRateCheck)
+
+        guard elapsed >= frameRateCheckInterval else { return }
+
+        let fps = Double(frameCount) / elapsed
+        let targetFps = Double(settings.targetFrameRate.rawValue)
+
+        if fps < targetFps * minimumAcceptableFpsRatio {
+            DevCamLogger.recording.warning("Window capture frame rate degraded: \(Int(fps)) fps (target: \(Int(targetFps)))")
+            // Could add a notification or callback here for UI feedback
+        } else {
+            DevCamLogger.recording.debug("Window capture frame rate: \(Int(fps)) fps")
+        }
+
+        // Reset counters
+        frameCount = 0
+        lastFrameRateCheck = now
+    }
+
+    private func resetPerformanceCounters() {
+        frameCount = 0
+        lastFrameRateCheck = Date()
     }
 
     // MARK: - Helpers
