@@ -27,7 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingManager: RecordingManager?
     private var clipExporter: ClipExporter?
     private var healthStats: HealthStats?
-    private var keyboardShortcutHandler: KeyboardShortcutHandler?
+    private var shortcutManager: ShortcutManager?
     private var menuBarPopover: NSPopover?
     private var settings: AppSettings?
     private var preferencesWindow: NSWindow?
@@ -334,39 +334,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupKeyboardShortcuts() {
-        keyboardShortcutHandler = KeyboardShortcutHandler()
-        keyboardShortcutHandler?.registerShortcuts(
-            onSave5Minutes: { [weak self] in
-                Task { @MainActor [weak self] in
-                    do {
-                        try await self?.clipExporter?.exportClip(duration: 300)
-                        DevCamLogger.export.info("5-minute clip exported via keyboard shortcut")
-                    } catch {
-                        DevCamLogger.export.error("Failed to export 5-minute clip: \(error.localizedDescription)")
-                    }
-                }
-            },
-            onSave10Minutes: { [weak self] in
-                Task { @MainActor [weak self] in
-                    do {
-                        try await self?.clipExporter?.exportClip(duration: 600)
-                        DevCamLogger.export.info("10-minute clip exported via keyboard shortcut")
-                    } catch {
-                        DevCamLogger.export.error("Failed to export 10-minute clip: \(error.localizedDescription)")
-                    }
-                }
-            },
-            onSave15Minutes: { [weak self] in
-                Task { @MainActor [weak self] in
-                    do {
-                        try await self?.clipExporter?.exportClip(duration: 900)
-                        DevCamLogger.export.info("15-minute clip exported via keyboard shortcut")
-                    } catch {
-                        DevCamLogger.export.error("Failed to export 15-minute clip: \(error.localizedDescription)")
-                    }
-                }
-            }
-        )
+        shortcutManager?.registerAllShortcuts()
         DevCamLogger.app.info("Keyboard shortcuts registered")
     }
 
@@ -435,6 +403,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             healthStats.setRecordingManager(recordingManager)
         }
 
+        // Initialize shortcut manager
+        shortcutManager = ShortcutManager(settings: settings)
+        if let shortcutManager = shortcutManager,
+           let recordingManager = recordingManager,
+           let clipExporter = clipExporter {
+            shortcutManager.setManagers(recordingManager: recordingManager, clipExporter: clipExporter)
+        }
+
         DevCamLogger.app.info("Managers initialized successfully")
     }
 
@@ -443,7 +419,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let settings = settings,
               let clipExporter = clipExporter,
               let healthStats = healthStats,
-              let recordingManager = recordingManager else {
+              let recordingManager = recordingManager,
+              let shortcutManager = shortcutManager else {
             DevCamLogger.app.error("Cannot show preferences - managers not initialized")
             return
         }
@@ -463,7 +440,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             permissionManager: permissionManager,
             clipExporter: clipExporter,
             healthStats: healthStats,
-            recordingManager: recordingManager
+            recordingManager: recordingManager,
+            shortcutManager: shortcutManager
         )
 
         let window = NSWindow(
