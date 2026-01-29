@@ -10,7 +10,7 @@ Status: This guide reflects current beta functionality and limitations (v1.2).
 - Identify permission and logging issues
 
 ## System Requirements
-- macOS 12.3+
+- macOS 13.0+
 - Screen Recording permission
 - 2 GB free disk space (more for higher quality)
 - Any display setup; DevCam records the primary display (largest resolution)
@@ -30,30 +30,28 @@ Status: This guide reflects current beta functionality and limitations (v1.2).
 - Menubar-only app with continuous recording and a rolling 15-minute buffer.
 - Save Clip slider (1-15 minutes in 1-minute steps).
 - Advanced clip window for custom start/end selection within the buffer.
-- Keyboard shortcuts for 5/10/15 minutes (DevCam must be active).
-- Preferences: save location, recording quality (Low/Medium/High), notifications.
+- Keyboard shortcuts for 5/10/15 minutes (DevCam must be active, Cmd+Option+5/6/7).
+- Preferences: save location, recording quality (Low/Medium/High), notifications, launch at login.
 - Clips browser with open, reveal, delete, and clear actions.
 - Privacy tab with permission status and a System Settings shortcut.
 
 ## Known Limitations
 - No audio recording.
 - Buffer length fixed at 15 minutes.
-- Shortcuts are app-local (not global).
-- Launch at login is a stored preference only.
-- Save location, notifications, and quality changes apply after restart.
+- Shortcuts are reliable when DevCam is active; global shortcuts are best-effort.
+- Recording quality changes apply after restart.
 - No display selection (records primary display only).
 - No forward-recording mode or clips longer than 15 minutes.
 
 ## Known Issues
-- Console spam: "Sample buffer has no image buffer" can appear during capture.
-- Energy spikes may occur when opening Preferences or revealing files.
+- Brief energy spikes may occur when opening Preferences or revealing files.
 
 ## What To Test
 - Launch and menubar visibility.
 - Recording starts automatically and buffer time increases.
 - Save Clip exports at multiple durations.
 - Advanced clip export with custom ranges.
-- Preferences persistence and restart-required behavior.
+- Preferences behavior (save location/notifications apply immediately; quality requires restart).
 - Clips tab actions (open, reveal, delete, clear).
 - Permission flow when denied or granted.
 - Sleep/wake pause and resume behavior.

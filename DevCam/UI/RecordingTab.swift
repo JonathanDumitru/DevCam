@@ -19,6 +19,9 @@ struct RecordingTab: View {
             // Display Selection
             displaySelectionSection
 
+            // Frame Rate
+            frameRateSection
+
             // Audio Capture
             audioCaptureSection
 
@@ -140,6 +143,68 @@ struct RecordingTab: View {
             return false
         }
         return display.id == largest.id
+    }
+
+    // MARK: - Frame Rate Section
+
+    private var frameRateSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Frame Rate")
+                    .font(.headline)
+
+                Picker("Target frame rate", selection: $settings.targetFrameRate) {
+                    ForEach(FrameRate.allCases) { rate in
+                        Text(rate.displayName).tag(rate)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text("Lower frame rates reduce CPU usage. 30 fps is recommended for most use cases.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+
+                Divider()
+
+                Toggle("Adaptive frame rate", isOn: $settings.adaptiveFrameRateEnabled)
+
+                if settings.adaptiveFrameRateEnabled {
+                    Text("Automatically reduces frame rate when no mouse or keyboard activity is detected.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+
+                    HStack {
+                        Text("Idle after:")
+                            .font(.caption)
+
+                        Picker("", selection: $settings.idleThreshold) {
+                            Text("3s").tag(3.0)
+                            Text("5s").tag(5.0)
+                            Text("10s").tag(10.0)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 150)
+                    }
+
+                    HStack {
+                        Text("Idle frame rate:")
+                            .font(.caption)
+
+                        Picker("", selection: $settings.idleFrameRate) {
+                            ForEach(FrameRate.allCases.filter { $0.rawValue < settings.targetFrameRate.rawValue }) { rate in
+                                Text(rate.displayName).tag(rate)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 150)
+                    }
+
+                    Label("Requires Accessibility permission for input monitoring", systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+        }
     }
 
     // MARK: - Audio Capture Section

@@ -168,7 +168,7 @@ Comprehensive debug logging instrumented throughout codebase:
 - ⏳ Verify menubar icon visibility
 - ⏳ Test Preferences window opening (verify crash fix)
 - ⏳ Confirm video recording actually writes segments
-- ⏳ Test keyboard shortcuts (⌘⇧5, ⌘⇧6, ⌘⇧7)
+- ⏳ Test keyboard shortcuts (⌘⌥5, ⌘⌥6, ⌘⌥7)
 - ⏳ Verify clip export functionality
 
 ---

@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import OSLog
 
 /// System load information
 struct SystemLoad {

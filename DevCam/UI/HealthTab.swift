@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HealthTab: View {
     @ObservedObject var healthStats: HealthStats
@@ -65,6 +66,14 @@ struct HealthTab: View {
                     value: recordingManager.isRecording ? "Active" : "Paused",
                     color: recordingManager.isRecording ? .green : .gray
                 )
+
+                if recordingManager.isRecording {
+                    StatusBadge(
+                        title: "Frame Rate",
+                        value: "\(recordingManager.currentFrameRate) fps",
+                        color: .blue
+                    )
+                }
 
                 if recordingManager.isInRecoveryMode {
                     StatusBadge(

@@ -434,8 +434,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func dismissWindowSelectionOverlay() {
-        overlayWindow?.close()
-        overlayWindow = nil
-        DevCamLogger.app.info("Window selection overlay dismissed")
+        // Clear available windows data first to prevent SwiftUI from accessing stale data during teardown
+        windowCaptureManager?.clearAvailableWindows()
+
+        // Give SwiftUI a brief moment to process the empty state before closing
+        DispatchQueue.main.async { [weak self] in
+            self?.overlayWindow?.close()
+            self?.overlayWindow = nil
+            DevCamLogger.app.info("Window selection overlay dismissed")
+        }
     }
 }

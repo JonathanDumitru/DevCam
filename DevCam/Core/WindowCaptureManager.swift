@@ -16,13 +16,16 @@ class WindowCaptureManager: NSObject, ObservableObject {
 
     // MARK: - Published State
 
-    @Published private(set) var availableWindows: [SCWindow] = []
+    /// Stable snapshots of available windows for UI display (won't crash when accessed)
+    @Published private(set) var availableWindows: [AvailableWindow] = []
     @Published private(set) var selectedWindows: [WindowSelection] = []
     @Published private(set) var isCapturing: Bool = false
     @Published private(set) var captureError: Error?
 
     // MARK: - Capture State
 
+    /// Internal storage of actual SCWindow objects for capture (not exposed to UI)
+    private var scWindowCache: [CGWindowID: SCWindow] = [:]
     private var windowStreams: [CGWindowID: SCStream] = [:]
     private var streamOutputs: [CGWindowID: WindowStreamOutput] = [:]
 
@@ -56,32 +59,83 @@ class WindowCaptureManager: NSObject, ObservableObject {
 
     // MARK: - Window Discovery
 
+    /// Clears available windows before overlay dismissal to prevent crashes during view teardown.
+    func clearAvailableWindows() {
+        availableWindows = []
+    }
+
+    /// Refreshes the list of available windows for UI display using CGWindowList API.
+    /// This avoids ScreenCaptureKit entirely for UI display to prevent crashes from dangling SCWindow references.
     func refreshAvailableWindows() async {
+        // Use CGWindowListCopyWindowInfo instead of ScreenCaptureKit for UI display
+        // This is more stable and doesn't have the dangling pointer issue
+        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            DevCamLogger.recording.error("Failed to get window list from CGWindowListCopyWindowInfo")
+            availableWindows = []
+            return
+        }
+
+        var windows: [AvailableWindow] = []
+
+        for windowInfo in windowList {
+            guard let windowID = windowInfo[kCGWindowNumber as String] as? CGWindowID,
+                  let boundsDict = windowInfo[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = boundsDict["X"],
+                  let y = boundsDict["Y"],
+                  let width = boundsDict["Width"],
+                  let height = boundsDict["Height"] else {
+                continue
+            }
+
+            // Filter out small windows (menubar, tooltips, etc.)
+            guard width >= 100 && height >= 100 else { continue }
+
+            // Filter out windows without a valid layer (typically system UI)
+            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? 0
+            guard layer == 0 else { continue }  // Normal windows are at layer 0
+
+            let ownerName = windowInfo[kCGWindowOwnerName as String] as? String ?? "Unknown"
+            let windowTitle = windowInfo[kCGWindowName as String] as? String ?? ""
+
+            let frame = CGRect(x: x, y: y, width: width, height: height)
+
+            windows.append(AvailableWindow(
+                windowID: windowID,
+                ownerName: ownerName,
+                windowTitle: windowTitle,
+                frame: frame
+            ))
+        }
+
+        availableWindows = windows
+        DevCamLogger.recording.debug("Found \(self.availableWindows.count) capturable windows via CGWindowList")
+    }
+
+    /// Fetches fresh SCWindow objects for capture. Called right before starting capture.
+    private func refreshWindowCache() async {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 true,
                 onScreenWindowsOnly: true
             )
 
-            // Filter to normal windows (exclude menubar, dock, tooltips, etc.)
-            availableWindows = content.windows.filter { window in
-                window.frame.width >= 100 && window.frame.height >= 100
+            scWindowCache.removeAll()
+            for window in content.windows {
+                scWindowCache[window.windowID] = window
             }
-
-            DevCamLogger.recording.debug("Found \(self.availableWindows.count) capturable windows")
         } catch {
-            DevCamLogger.recording.error("Failed to get available windows: \(error.localizedDescription)")
-            availableWindows = []
+            DevCamLogger.recording.error("Failed to refresh window cache: \(error.localizedDescription)")
+            scWindowCache.removeAll()
         }
     }
 
     // MARK: - Window Selection
 
-    func selectWindow(_ window: SCWindow, asPrimary: Bool) {
+    func selectWindow(_ window: AvailableWindow, asPrimary: Bool) {
         let selection = WindowSelection(
             windowID: window.windowID,
-            ownerName: window.owningApplication?.applicationName ?? "Unknown",
-            windowTitle: window.title ?? "",
+            ownerName: window.ownerName,
+            windowTitle: window.windowTitle,
             isPrimary: asPrimary
         )
 
@@ -144,16 +198,17 @@ class WindowCaptureManager: NSObject, ObservableObject {
         }
 
         resetPerformanceCounters()
-        await refreshAvailableWindows()
+        // Fetch fresh SCWindow objects right before capture
+        await refreshWindowCache()
 
         for selection in selectedWindows {
-            guard let window = availableWindows.first(where: { $0.windowID == selection.windowID }) else {
+            guard let scWindow = scWindowCache[selection.windowID] else {
                 DevCamLogger.recording.warning("Window \(selection.windowID) no longer available, skipping")
                 continue
             }
 
             do {
-                try await startStreamForWindow(window)
+                try await startStreamForWindow(scWindow)
             } catch {
                 DevCamLogger.recording.error("Failed to start capture for window \(selection.windowID): \(error.localizedDescription)")
             }

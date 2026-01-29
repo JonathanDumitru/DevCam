@@ -1,9 +1,10 @@
 # ScreenCaptureKit Integration Guide
 
 This document explains how DevCam integrates with ScreenCaptureKit for high
-performance screen recording on macOS 12.3+.
+performance screen recording. ScreenCaptureKit was introduced in macOS 12.3,
+while DevCam targets macOS 13.0+ due to ServiceManagement login item support.
 
-Status: RecordingManager, VideoStreamOutput, and ClipExporter are implemented. Menubar and Preferences UI are wired; recording quality scaling is active and other settings remain stubs.
+Status: RecordingManager, VideoStreamOutput, and ClipExporter are implemented. Menubar and Preferences UI are wired; some settings remain stubs.
 
 ## Why ScreenCaptureKit
 
@@ -96,9 +97,6 @@ let filter = SCContentFilter(desktopIndependentWindow: targetWindow)
 
 DevCam uses the full display filter by default.
 
-Recording quality is applied by scaling the chosen display resolution before
-assigning width/height to the stream configuration.
-
 ## Creating and Starting the Stream
 
 ```
@@ -164,9 +162,11 @@ let videoSettings: [String: Any] = [
     AVVideoCodecKey: AVVideoCodecType.h264,
     AVVideoWidthKey: display.width,
     AVVideoHeightKey: display.height,
-    AVVideoAverageBitRateKey: 5_000_000,
-    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-    AVVideoExpectedSourceFrameRateKey: 60
+    AVVideoCompressionPropertiesKey: [
+        AVVideoAverageBitRateKey: 5_000_000,
+        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+        AVVideoExpectedSourceFrameRateKey: 60
+    ]
 ]
 
 let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)

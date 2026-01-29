@@ -177,7 +177,9 @@ class ShortcutManager: ObservableObject {
     // MARK: - Cleanup
 
     deinit {
-        // Note: Cannot call MainActor-isolated unregisterAll() from deinit
-        // Event monitors will be cleaned up when the monitors are deallocated
+        // MainActor classes deinit on main thread; use assumeIsolated to satisfy compiler
+        MainActor.assumeIsolated {
+            unregisterAll()
+        }
     }
 }

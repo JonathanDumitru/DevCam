@@ -1,6 +1,6 @@
 # DevCam User Guide
 
-Status: Menubar UI, continuous recording, and export workflow are implemented. Recording quality selection is available; some settings apply after restart.
+Status: Menubar UI, continuous recording, and export workflow are implemented. Recording quality selection is available; quality changes apply after restart.
 
 ## Quick Start
 1. Launch DevCam from Applications.
@@ -16,7 +16,7 @@ DevCam runs in the macOS menubar. The status area shows:
 
 Menu actions:
 - Save Clip (duration slider + save button)
-- Advanced... (custom start/end selection)
+- Advanced... (custom start/end range)
 - Preferences
 - Quit DevCam
 
@@ -30,29 +30,25 @@ Export behavior:
 - Clips are saved to the selected folder
 - Export progress is shown in the menubar
 
-Menubar save options:
-- Save Clip slider supports 1-15 minute exports in 1-minute steps.
-- Advanced... lets you set a custom start/end range within the buffer.
-
 Notes:
 - Save actions are disabled until the buffer has content.
 - DevCam continues recording during exports.
+- The Save Clip slider supports 1-15 minute exports in 1-minute steps.
 
 ## Keyboard Shortcuts
 Default shortcuts:
-- Save last 5 minutes: Command-Shift-5
-- Save last 10 minutes: Command-Shift-6
-- Save last 15 minutes: Command-Shift-7
+- Save last 5 minutes: Command-Option-5
+- Save last 10 minutes: Command-Option-6
+- Save last 15 minutes: Command-Option-7
 
-Shortcuts are app-local and not customizable in current builds.
+Shortcuts are reliable when DevCam is active (popover open) and are not customizable in current builds.
 
 ## Preferences
 Preferences are divided into tabs:
-- General: save location, recording quality, launch at login (preference only), notifications
+- General: save location, recording quality, launch at login, notifications
 - Clips: recent exports and quick actions
 - Privacy: local-only data handling information and permission status
 
-Recording quality, save location, and notification changes apply after restart.
 See SETTINGS.md for details.
 
 ## Storage and Buffer
@@ -67,7 +63,7 @@ To avoid failed exports, keep at least 2 GB free disk space.
 When enabled, DevCam shows macOS notifications for:
 - Export success
 
-Notification preference changes take effect on next launch.
+Notification preference changes apply immediately.
 
 ## Logs
 If something goes wrong, DevCam logs events to:
@@ -79,12 +75,10 @@ log show --last 1h --predicate 'process == "DevCam"' --style compact
 ```
 
 ## Known Limitations
-- Global hotkeys are not supported; shortcuts only work when DevCam is active.
-- Launch at login is stored as a preference only.
-- Save location, notification, and quality changes take effect on next launch.
+- Global hotkeys are not guaranteed; shortcuts are reliable when DevCam is active.
+- Recording quality changes apply after restart.
 - No forward-recording mode for longer-than-15-minute clips.
 - No audio recording.
-- No display selection; DevCam records the primary display.
 
 ## Uninstall
 To remove DevCam completely:

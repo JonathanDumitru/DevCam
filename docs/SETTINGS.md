@@ -1,18 +1,18 @@
 # DevCam Settings Reference
 
-Status: Preferences UI is available with General, Clips, and Privacy tabs. Recording quality selection is implemented; other recording controls and shortcut customization are not.
+Status: Preferences UI is available with General, Clips, and Privacy tabs. Recording quality selection is implemented; shortcut customization is not.
 
 ## General
 
 ### Save Location
 - Folder where clips are exported
 - Selected via the macOS file picker
-- Changes take effect on next launch (current exporter uses the location set at startup)
+- Changes apply immediately for new exports
 
 ### Recording Quality
 - Low (720p), Medium (1080p), High (native resolution)
 - Changes affect capture resolution and file size
-- Changes take effect on next launch
+- Changes take effect after restart
 
 ### Launch at Login
 - Automatically launches DevCam when you log in to macOS
@@ -23,7 +23,7 @@ Status: Preferences UI is available with General, Clips, and Privacy tabs. Recor
 
 ### Notifications
 - Controls whether export notifications are shown
-- Changes take effect on next launch
+- Changes apply immediately for new notifications
 
 ## Clips
 - Shows recent exports (most recent first)
@@ -36,7 +36,7 @@ Status: Preferences UI is available with General, Clips, and Privacy tabs. Recor
 - Summarizes local-only storage and buffer/clip locations
 
 ## Not Implemented Yet
-- Dedicated recording tab (buffer duration, display selection, cursor capture)
+- Recording tab (buffer duration, display selection, cursor capture)
 - Forward-recording mode for longer-than-15-minute clips
 - Shortcuts tab (custom hotkeys)
 - Advanced tools (reset permissions, open logs)

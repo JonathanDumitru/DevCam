@@ -4,17 +4,12 @@ This directory contains the user, developer, and project documentation for DevCa
 
 ## Workflow Note
 The documentation is currently a workflow test using multiple tools. See WORKFLOW.md for details.
+Historical plans and session notes may reference older shortcuts or macOS targets; use the User Guide, Settings, and Known Issues for current behavior.
 
 ## Documentation Overview
 
 ### For Users
 - User Guide: USER_GUIDE.md
-- Beta Testing Guide: BETA_TESTING.md
-- Known Issues: KNOWN_ISSUES.md
-- Compatibility: COMPATIBILITY.md
-- Diagnostics: DIAGNOSTICS.md
-- Feedback Template: FEEDBACK_TEMPLATE.md
-- Beta Release Notes: BETA_RELEASE_NOTES.md
 - Shortcuts Reference: SHORTCUTS.md
 - Settings Reference: SETTINGS.md
 - Troubleshooting: TROUBLESHOOTING.md
@@ -39,6 +34,9 @@ The documentation is currently a workflow test using multiple tools. See WORKFLO
 - Workflow Notes: WORKFLOW.md
 - Implementation Plan: plans/2026-01-22-devcam-implementation.md
 - Current State Snapshot: CURRENT_STATE.md
+- App Review Notes: APP_REVIEW_NOTES.md
+- App Review Gaps: APP_REVIEW_GAPS.md
+- App Store Metadata Draft: APP_STORE_METADATA_DRAFT.md
 
 ## Project Structure
 ```

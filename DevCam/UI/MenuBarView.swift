@@ -13,7 +13,7 @@ struct MenuBarView: View {
     @ObservedObject var clipExporter: ClipExporter
     let bufferManager: BufferManager
     @ObservedObject var windowCaptureManager: WindowCaptureManager
-    let settings: AppSettings
+    @ObservedObject var settings: AppSettings
     let onSelectWindows: () -> Void
 
     let onPreferences: () -> Void
