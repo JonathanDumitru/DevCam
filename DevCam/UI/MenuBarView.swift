@@ -11,6 +11,7 @@ import CoreMedia
 struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
+    @ObservedObject var settings: AppSettings
     let bufferManager: BufferManager
     @ObservedObject var windowCaptureManager: WindowCaptureManager
     @ObservedObject var settings: AppSettings
@@ -22,6 +23,12 @@ struct MenuBarView: View {
     @State private var selectedDuration: Double = 300 // Default 5 minutes (in seconds)
     @State private var showAdvancedWindow = false
     @State private var isPreparingPreview = false
+
+    // Display selection state
+    @State private var availableDisplays: [(id: UInt32, name: String, width: Int, height: Int)] = []
+    @State private var showDisplaySwitchConfirmation = false
+    @State private var pendingDisplaySwitch: UInt32?
+    @State private var isSwitchingDisplay = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +57,26 @@ struct MenuBarView: View {
                 clipExporter: clipExporter,
                 bufferManager: bufferManager
             )
+        }
+        .sheet(isPresented: $showDisplaySwitchConfirmation) {
+            if let displayID = pendingDisplaySwitch,
+               let display = availableDisplays.first(where: { $0.id == displayID }) {
+                DisplaySwitchConfirmationView(
+                    targetDisplayName: "\(display.name) (\(display.width)×\(display.height))",
+                    onConfirm: {
+                        performDisplaySwitch(to: displayID)
+                        showDisplaySwitchConfirmation = false
+                        pendingDisplaySwitch = nil
+                    },
+                    onCancel: {
+                        showDisplaySwitchConfirmation = false
+                        pendingDisplaySwitch = nil
+                    }
+                )
+            }
+        }
+        .task {
+            availableDisplays = await recordingManager.getDisplayList()
         }
     }
 
@@ -191,25 +218,74 @@ struct MenuBarView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-
-                // Warning for high window count
-                if windowCaptureManager.selectedWindows.count > settings.windowCountWarningThreshold {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 10))
-                        Text("\(windowCaptureManager.selectedWindows.count) windows - quality may degrade")
-                            .font(.system(size: 10))
-                            .foregroundColor(.yellow)
-                    }
-                    .padding(.horizontal, 12)
-                }
+                .contentShape(Rectangle())
             }
+            .menuStyle(.borderlessButton)
+            .disabled(clipExporter.isExporting || isSwitchingDisplay || availableDisplays.count <= 1)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    /// The display currently being recorded
+    private var currentDisplayID: UInt32 {
+        switch settings.displaySelectionMode {
+        case .primary:
+            // Primary is the largest display
+            return availableDisplays.max(by: { $0.width * $0.height < $1.width * $1.height })?.id ?? 0
+        case .specific:
+            return settings.selectedDisplayID
+        case .all:
+            return 0 // Not applicable
+        }
+    }
+
+    /// Label for the current display in the menu
+    private var currentDisplayLabel: String {
+        if availableDisplays.isEmpty {
+            return "Loading..."
+        }
+
+        switch settings.displaySelectionMode {
+        case .primary:
+            if let display = availableDisplays.max(by: { $0.width * $0.height < $1.width * $1.height }) {
+                return "\(display.name) (Primary)"
+            }
+            return "Primary Display"
+        case .specific:
+            if let display = availableDisplays.first(where: { $0.id == settings.selectedDisplayID }) {
+                return display.name
+            }
+            return "Display \(settings.selectedDisplayID)"
+        case .all:
+            return "All Displays"
+        }
+    }
+
+    /// Handles display selection from the menu
+    private func handleDisplaySelection(_ displayID: UInt32) {
+        // Skip if already on this display
+        guard displayID != currentDisplayID else { return }
+
+        // Show confirmation dialog
+        pendingDisplaySwitch = displayID
+        showDisplaySwitchConfirmation = true
+    }
+
+    /// Performs the actual display switch after user confirmation
+    private func performDisplaySwitch(to displayID: UInt32) {
+        isSwitchingDisplay = true
+
+        Task {
+            do {
+                try await recordingManager.switchDisplay(to: displayID)
+                // Refresh display list in case anything changed
+                availableDisplays = await recordingManager.getDisplayList()
+            } catch {
+                // Error is handled by RecordingManager and shown in status
+            }
+            isSwitchingDisplay = false
+        }
     }
 
     @ViewBuilder
@@ -464,6 +540,7 @@ struct MenuBarView: View {
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
+        settings: settings,
         bufferManager: bufferManager,
         windowCaptureManager: windowCaptureManager,
         settings: settings,

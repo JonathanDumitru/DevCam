@@ -226,51 +226,36 @@ final class RecordingManagerTests: XCTestCase {
         XCTAssertTrue(true, "Memory test completed")
     }
 
-    // MARK: - Window Capture Integration Tests
+    // MARK: - Display Switch Tests
 
-    func testSetWindowCaptureManager() async throws {
-        let settings = AppSettings()
-        let windowCaptureManager = WindowCaptureManager(settings: settings)
-
-        recordingManager.setWindowCaptureManager(windowCaptureManager)
-
-        // Setting the window capture manager should succeed without error
-        // The onCompositedFrame callback should be set
-        XCTAssertNotNil(windowCaptureManager.onCompositedFrame, "Composited frame callback should be set")
-    }
-
-    func testCaptureModeDefaultsToDisplay() async throws {
-        // Remove any persisted value to test the actual default
-        UserDefaults.standard.removeObject(forKey: "captureMode")
-        let settings = AppSettings()
-        XCTAssertEqual(settings.captureMode, .display, "Default capture mode should be display")
-    }
-
-    func testCaptureModeCanBeSetToWindows() async throws {
-        let settings = AppSettings()
-        settings.captureMode = .windows
-        XCTAssertEqual(settings.captureMode, .windows, "Capture mode should be settable to windows")
-    }
-
-    func testDisplayCaptureWorksWithDisplayMode() async throws {
-        // Default mode is display, so recording should use display capture
-        let settings = AppSettings()
-        XCTAssertEqual(settings.captureMode, .display)
-
-        // In test mode, recording should start successfully
+    func testSwitchDisplayClearsBuffer() async throws {
+        // Start recording and accumulate some buffer
         try await recordingManager.startRecording()
-        XCTAssertTrue(recordingManager.isRecording, "Recording should start in display mode")
+        try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+
+        // Verify we have buffer content
+        let durationBefore = await bufferManager.getCurrentBufferDuration()
+        XCTAssertGreaterThan(durationBefore, 0, "Should have buffer content before switch")
+
+        // Get a display ID to switch to (in test mode, we use a fake ID)
+        let fakeDisplayID: UInt32 = 12345
+
+        // Switch display
+        try await recordingManager.switchDisplay(to: fakeDisplayID)
+
+        // Buffer should be cleared
+        let durationAfter = await bufferManager.getCurrentBufferDuration()
+        XCTAssertEqual(durationAfter, 0, "Buffer should be cleared after display switch")
 
         await recordingManager.stopRecording()
     }
 
-    func testWindowCaptureFallsBackToDisplayWhenNoWindowsSelected() async throws {
-        // Set capture mode to windows but don't select any windows
-        let settings = AppSettings()
-        settings.captureMode = .windows
-        settings.clearWindowSelection()
+    func testSwitchDisplayUpdatesSettings() async throws {
+        // Start recording
+        try await recordingManager.startRecording()
 
-        // Create new recording manager with these settings
+        // Get reference to settings
+        let settings = AppSettings()
         let newRecordingManager = RecordingManager(
             bufferManager: bufferManager,
             permissionManager: permissionManager,

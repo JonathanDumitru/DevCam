@@ -14,6 +14,11 @@ struct RecordingTab: View {
     @State private var availableDisplays: [(id: UInt32, name: String, width: Int, height: Int)] = []
     @State private var isLoadingDisplays = true
 
+    // Display switch confirmation state
+    @State private var showDisplaySwitchConfirmation = false
+    @State private var pendingDisplaySwitch: UInt32?
+    @State private var isSwitchingDisplay = false
+
     var body: some View {
         Form {
             // Display Selection
@@ -35,6 +40,23 @@ struct RecordingTab: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             await loadDisplays()
+        }
+        .sheet(isPresented: $showDisplaySwitchConfirmation) {
+            if let displayID = pendingDisplaySwitch,
+               let display = availableDisplays.first(where: { $0.id == displayID }) {
+                DisplaySwitchConfirmationView(
+                    targetDisplayName: "\(display.name) (\(display.width)×\(display.height))",
+                    onConfirm: {
+                        performDisplaySwitch(to: displayID)
+                        showDisplaySwitchConfirmation = false
+                        pendingDisplaySwitch = nil
+                    },
+                    onCancel: {
+                        showDisplaySwitchConfirmation = false
+                        pendingDisplaySwitch = nil
+                    }
+                )
+            }
         }
     }
 
@@ -74,12 +96,23 @@ struct RecordingTab: View {
                             .font(.caption)
                             .foregroundColor(.orange)
                     } else {
-                        Text("Select Display")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                        HStack {
+                            Text("Select Display")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            if isSwitchingDisplay {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                Text("Switching...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
 
                         ForEach(availableDisplays, id: \.id) { display in
                             displayRow(display)
+                                .disabled(isSwitchingDisplay)
                         }
                     }
 
@@ -103,7 +136,7 @@ struct RecordingTab: View {
     private func displayRow(_ display: (id: UInt32, name: String, width: Int, height: Int)) -> some View {
         HStack {
             Button(action: {
-                settings.selectedDisplayID = display.id
+                handleDisplaySelection(display.id)
             }) {
                 HStack {
                     Image(systemName: settings.selectedDisplayID == display.id ? "checkmark.circle.fill" : "circle")
@@ -338,6 +371,37 @@ struct RecordingTab: View {
         // Auto-select first display if none selected
         if settings.selectedDisplayID == 0, let first = availableDisplays.first {
             settings.selectedDisplayID = first.id
+        }
+    }
+
+    /// Handles display selection - shows confirmation if recording is active
+    private func handleDisplaySelection(_ displayID: UInt32) {
+        // Skip if already selected
+        guard displayID != settings.selectedDisplayID else { return }
+
+        // If recording is active, show confirmation dialog
+        if recordingManager.isRecording {
+            pendingDisplaySwitch = displayID
+            showDisplaySwitchConfirmation = true
+        } else {
+            // Not recording - just update settings directly
+            settings.selectedDisplayID = displayID
+        }
+    }
+
+    /// Performs the actual display switch after user confirmation
+    private func performDisplaySwitch(to displayID: UInt32) {
+        isSwitchingDisplay = true
+
+        Task {
+            do {
+                try await recordingManager.switchDisplay(to: displayID)
+                // Refresh display list in case anything changed
+                await loadDisplays()
+            } catch {
+                // Error is handled by RecordingManager
+            }
+            isSwitchingDisplay = false
         }
     }
 }

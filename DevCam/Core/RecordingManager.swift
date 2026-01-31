@@ -14,6 +14,7 @@ import ScreenCaptureKit
 import AVFoundation
 import Combine
 import OSLog
+import UserNotifications
 
 enum RecordingError: Error {
     case permissionDenied
@@ -165,13 +166,24 @@ class RecordingManager: NSObject, ObservableObject {
         if let wakeObserver = wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
-        // MainActor classes deinit on main thread; use assumeIsolated to satisfy compiler
-        MainActor.assumeIsolated {
-            stopAutoRecovery()
-            stopPermissionMonitoring()
-            stopPeriodicBufferValidation()
-            stopBatteryMonitoring()
-            stopAdaptiveQualityMonitoring()
+        // Timer invalidation must happen on MainActor
+        // Since deinit is nonisolated, schedule cleanup on MainActor
+        let autoRecoveryTimer = self.autoRecoveryTimer
+        let permissionMonitorTimer = self.permissionMonitorTimer
+        let bufferValidationTimer = self.bufferValidationTimer
+        let batteryCancellable = self.batteryCancellable
+        let batteryMonitor = self.batteryMonitor
+        let systemLoadCancellable = self.systemLoadCancellable
+        let systemLoadMonitor = self.systemLoadMonitor
+
+        Task { @MainActor in
+            autoRecoveryTimer?.invalidate()
+            permissionMonitorTimer?.invalidate()
+            bufferValidationTimer?.invalidate()
+            batteryCancellable?.cancel()
+            batteryMonitor?.stopMonitoring()
+            systemLoadCancellable?.cancel()
+            systemLoadMonitor?.stopMonitoring()
         }
     }
 
@@ -284,87 +296,29 @@ class RecordingManager: NSObject, ObservableObject {
         try await startRecording()
     }
 
-    // MARK: - Window Capture Integration
+    /// Switches recording to a different display, clearing the buffer.
+    /// Call this after user confirms the switch (buffer will be lost).
+    ///
+    /// - Parameter displayID: The display ID to switch to
+    /// - Throws: RecordingError if restart fails
+    func switchDisplay(to displayID: UInt32) async throws {
+        DevCamLogger.recording.info("Switching to display \(displayID)")
 
-    /// Sets the window capture manager for window-based recording.
-    /// When set, enables window capture mode when `settings.captureMode == .windows`.
-    func setWindowCaptureManager(_ manager: WindowCaptureManager) {
-        self.windowCaptureManager = manager
+        // Stop current recording
+        await stopRecording()
 
-        // Subscribe to composited frames
-        manager.onCompositedFrame = { [weak self] buffer in
-            Task { @MainActor in
-                await self?.processWindowCaptureFrame(buffer)
-            }
-        }
+        // Clear buffer - no mixed-display clips
+        bufferManager.clearBuffer()
+        bufferDuration = 0
 
-        // Subscribe to all-windows-closed fallback
-        manager.onAllWindowsClosed = { [weak self] in
-            Task { @MainActor in
-                await self?.fallbackToDisplayCapture()
-            }
-        }
-    }
+        // Update settings
+        settings.selectedDisplayID = displayID
+        settings.displaySelectionMode = .specific
 
-    /// Switches from window capture to display capture when all captured windows are closed.
-    /// This maintains recording continuity by seamlessly transitioning to display capture
-    /// without creating a new segment.
-    private func fallbackToDisplayCapture() async {
-        guard isRecording else { return }
+        // Restart on new display
+        try await startRecording()
 
-        DevCamLogger.recording.info("Falling back to display capture - all windows closed")
-
-        // Switch capture mode
-        settings.captureMode = .display
-
-        // Stop window capture
-        await windowCaptureManager?.stopCapture()
-
-        // Start display capture without breaking the current segment
-        // The existing AVAssetWriter can continue receiving frames
-        do {
-            try await setupDisplayCapture()
-            DevCamLogger.recording.info("Successfully switched to display capture")
-        } catch {
-            DevCamLogger.recording.error("Failed to fall back to display capture: \(error.localizedDescription)")
-            recordingError = error
-        }
-    }
-
-    /// Processes composited frames from window capture and writes them to the current segment.
-    private func processWindowCaptureFrame(_ pixelBuffer: CVPixelBuffer) async {
-        guard let input = currentWriterInput, isWriterReady else { return }
-
-        // Create CMSampleBuffer from CVPixelBuffer
-        var timing = CMSampleTimingInfo(
-            duration: CMTime(value: 1, timescale: CMTimeScale(settings.targetFrameRate.rawValue)),
-            presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
-            decodeTimeStamp: .invalid
-        )
-
-        var formatDescription: CMFormatDescription?
-        CMVideoFormatDescriptionCreateForImageBuffer(
-            allocator: kCFAllocatorDefault,
-            imageBuffer: pixelBuffer,
-            formatDescriptionOut: &formatDescription
-        )
-
-        guard let formatDesc = formatDescription else { return }
-
-        var sampleBuffer: CMSampleBuffer?
-        CMSampleBufferCreateReadyWithImageBuffer(
-            allocator: kCFAllocatorDefault,
-            imageBuffer: pixelBuffer,
-            formatDescription: formatDesc,
-            sampleTiming: &timing,
-            sampleBufferOut: &sampleBuffer
-        )
-
-        guard let buffer = sampleBuffer else { return }
-
-        if input.isReadyForMoreMediaData {
-            input.append(buffer)
-        }
+        DevCamLogger.recording.info("Successfully switched to display \(displayID)")
     }
 
     // MARK: - ScreenCaptureKit Setup
@@ -1316,6 +1270,81 @@ class RecordingManager: NSObject, ObservableObject {
         let totalDuration = bufferManager.getCurrentBufferDuration()
         self.bufferDuration = totalDuration
     }
+
+    // MARK: - Display Disconnect Handling
+
+    /// Checks if an error indicates the display was disconnected.
+    /// ScreenCaptureKit returns specific error codes when the source display is no longer available.
+    private func isDisplayDisconnectedError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+
+        // ScreenCaptureKit domain errors for display issues
+        // Common codes: -3814 (display not available), -3815 (source changed)
+        if nsError.domain == "com.apple.ScreenCaptureKit" {
+            let displayErrors: Set<Int> = [-3814, -3815, -3816]
+            return displayErrors.contains(nsError.code)
+        }
+
+        // Also check for IOSurface errors related to display disconnect
+        if nsError.domain == "IOSurface" {
+            return true
+        }
+
+        // Check error description for display-related keywords
+        let description = error.localizedDescription.lowercased()
+        return description.contains("display") && (
+            description.contains("disconnect") ||
+            description.contains("not available") ||
+            description.contains("removed")
+        )
+    }
+
+    /// Handles display disconnection by switching to primary display.
+    /// Called when the currently recording display is no longer available.
+    private func handleDisplayDisconnect() async {
+        DevCamLogger.recording.warning("Display disconnected, switching to primary")
+
+        // Clear buffer - can't have mixed-display clips
+        bufferManager.clearBuffer()
+        bufferDuration = 0
+
+        // Switch to primary mode
+        settings.displaySelectionMode = .primary
+
+        // Restart recording on primary display
+        do {
+            try await startRecording()
+            sendDisplayDisconnectedNotification()
+            DevCamLogger.recording.info("Successfully switched to primary display after disconnect")
+        } catch {
+            DevCamLogger.recording.error("Failed to recover from display disconnect: \(error.localizedDescription)")
+            recordingError = error
+            scheduleAutoRecovery()
+        }
+    }
+
+    /// Sends a notification to the user that the display was disconnected and recording has switched.
+    private func sendDisplayDisconnectedNotification() {
+        guard settings.showNotifications else { return }
+
+        CriticalAlertManager.sendAlert(.recordingRecovered)
+
+        // Also send a user-facing notification
+        Task {
+            let content = UNMutableNotificationContent()
+            content.title = "Display Disconnected"
+            content.body = "Recording switched to primary display. Buffer was cleared."
+            content.sound = .default
+
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+
+            try? await UNUserNotificationCenter.current().add(request)
+        }
+    }
 }
 
 // MARK: - SCStreamDelegate
@@ -1326,10 +1355,18 @@ extension RecordingManager: SCStreamDelegate {
     /// **Thread Safety**: Callbacks arrive off-main; hop to @MainActor before touching state.
     ///
     /// **Retry Strategy**: Exponential backoff (1s, 2s, 4s) before giving up.
+    /// **Display Disconnect**: Special handling for display disconnection errors.
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
             DevCamLogger.recording.error("Stream stopped with error: \(String(describing: error), privacy: .public)")
             self.recordingError = error
+
+            // Check for display disconnection - handle specially
+            if isDisplayDisconnectedError(error) {
+                DevCamLogger.recording.warning("Detected display disconnect, switching to primary")
+                await handleDisplayDisconnect()
+                return
+            }
 
             if retryCount < maxRetries {
                 let backoffDelay = pow(2.0, Double(retryCount)) // 1s, 2s, 4s
