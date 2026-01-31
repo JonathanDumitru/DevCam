@@ -3830,7 +3830,7 @@ If we ever change our privacy practices:
 - Version number will increment
 - Major changes will be announced in release notes
 
-**Current Version**: 1.2 (2026-01-26)
+**Current Version**: 1.0 (2026-01-22)
 
 ## Questions or Concerns
 

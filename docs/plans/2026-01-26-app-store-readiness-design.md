@@ -84,7 +84,7 @@ Global event monitors (`NSEvent.addGlobalMonitorForEvents`) may fail or require 
 
 **Testing required:**
 - Build with sandbox entitlement
-- Test if ⌘⇧5/6/7 work system-wide
+- Test if ⌘⌥5/6/7 work system-wide
 - If not, consider: removing feature for App Store, or documenting Accessibility permission requirement
 
 ---

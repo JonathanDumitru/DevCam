@@ -25,6 +25,8 @@ Initiatives:
 - Clip trimming UI
 - Multi-display selection
 - Resolution selection (720p through native)
+- Save-range selection UI for clips (from app launch onward)
+- Compact menubar save prompt to reduce UI footprint
 - Forward recording mode for longer-than-15-minute clips
 - Adjustable buffer length options
 

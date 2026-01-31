@@ -63,15 +63,15 @@ Expected:
 
 Steps:
 1. Click the menubar icon to focus DevCam
-2. Press Cmd+Shift+5
+2. Press Cmd+Option+5 (with DevCam active)
 3. Wait for export
-4. Try Cmd+Shift+6 and Cmd+Shift+7
+4. Try Cmd+Option+6 and Cmd+Option+7
 5. Check save location for files
 
 Expected:
-- ✅ Cmd+Shift+5 saves 5-minute clip
-- ✅ Cmd+Shift+6 saves 10-minute clip
-- ✅ Cmd+Shift+7 saves 15-minute clip
+- ✅ Cmd+Option+5 saves 5-minute clip
+- ✅ Cmd+Option+6 saves 10-minute clip
+- ✅ Cmd+Option+7 saves 15-minute clip
 - ✅ All files created successfully
 - ✅ Keyboard events consumed (don't trigger other apps)
 

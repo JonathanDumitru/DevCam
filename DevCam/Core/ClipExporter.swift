@@ -160,6 +160,120 @@ class ClipExporter: NSObject, ObservableObject {
     // REMOVED: updateSaveLocation() - saveLocation now automatically reflects settings.saveLocation
     // The save location directory is ensured to exist during export operations
 
+    /// Prepare a temporary video file for preview playback.
+    /// - Parameter duration: Duration of content to include in preview
+    /// - Returns: URL to the temporary preview file, or nil if insufficient buffer
+    func preparePreview(duration: TimeInterval) async throws -> URL? {
+        guard !isExporting else {
+            DevCamLogger.export.notice("Export already in progress, cannot prepare preview")
+            return nil
+        }
+
+        let segments = bufferManager.getSegmentsForTimeRange(duration: duration)
+
+        guard !segments.isEmpty else {
+            DevCamLogger.export.notice("No segments available for preview")
+            return nil
+        }
+
+        DevCamLogger.export.debug("Preparing preview with \(segments.count) segments")
+
+        let composition = try createComposition(from: segments)
+
+        // Generate temp file URL
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let timestamp = formatter.string(from: Date())
+        let tempURL = tempDirectory.appendingPathComponent("DevCam_Preview_\(timestamp).mp4")
+
+        try await exportComposition(composition, to: tempURL)
+
+        DevCamLogger.export.debug("Preview prepared at: \(tempURL.path)")
+        return tempURL
+    }
+
+    /// Export a trimmed clip with a specific time range.
+    /// - Parameters:
+    ///   - timeRange: The CMTimeRange to export
+    ///   - sourceURL: URL of the source video (usually the preview temp file)
+    func exportClipWithRange(_ timeRange: CMTimeRange, from sourceURL: URL) async throws {
+        guard !isExporting else {
+            DevCamLogger.export.notice("Export already in progress")
+            return
+        }
+
+        isExporting = true
+        exportProgress = 0.0
+        exportError = nil
+
+        do {
+            // Ensure save location directory exists
+            try FileManager.default.createDirectory(at: saveLocation, withIntermediateDirectories: true)
+
+            let sourceAsset = AVURLAsset(url: sourceURL)
+            let composition = AVMutableComposition()
+
+            guard let videoTrack = composition.addMutableTrack(
+                withMediaType: .video,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw ExportError.compositionFailed
+            }
+
+            // Check if source has audio
+            let hasAudio = !sourceAsset.tracks(withMediaType: .audio).isEmpty
+            let audioTrack: AVMutableCompositionTrack? = hasAudio
+                ? composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+                : nil
+
+            guard let sourceVideoTrack = sourceAsset.tracks(withMediaType: .video).first else {
+                throw ExportError.compositionFailed
+            }
+
+            try videoTrack.insertTimeRange(timeRange, of: sourceVideoTrack, at: .zero)
+
+            if let audioTrack = audioTrack,
+               let sourceAudioTrack = sourceAsset.tracks(withMediaType: .audio).first {
+                try audioTrack.insertTimeRange(timeRange, of: sourceAudioTrack, at: .zero)
+            }
+
+            let outputURL = generateOutputURL()
+            try await exportComposition(composition, to: outputURL)
+
+            let clipDuration = CMTimeGetSeconds(timeRange.duration)
+            let fileSize = try self.fileSize(at: outputURL)
+
+            let clipInfo = ClipInfo(
+                id: UUID(),
+                fileURL: outputURL,
+                timestamp: Date(),
+                duration: clipDuration,
+                fileSize: fileSize,
+                title: nil,
+                notes: nil,
+                tags: []
+            )
+
+            addToRecentClips(clipInfo)
+
+            if showNotifications {
+                showExportNotification(clip: clipInfo)
+            }
+
+            exportProgress = 1.0
+            DevCamLogger.export.debug("Trimmed clip exported: \(outputURL.lastPathComponent)")
+
+        } catch {
+            exportError = error
+            isExporting = false
+            DevCamLogger.export.error("Failed to export trimmed clip: \(error.localizedDescription)")
+            throw error
+        }
+
+        isExporting = false
+    }
+
     func deleteClip(_ clip: ClipInfo) {
         do {
             try FileManager.default.removeItem(at: clip.fileURL)
@@ -277,6 +391,18 @@ class ClipExporter: NSObject, ObservableObject {
             throw ExportError.compositionFailed
         }
 
+        // Check if first segment has audio - if so, create an audio track for stitching
+        let firstAsset = AVURLAsset(url: segments.first!.fileURL)
+        let hasAudio = !firstAsset.tracks(withMediaType: .audio).isEmpty
+
+        let audioTrack: AVMutableCompositionTrack? = hasAudio
+            ? composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+            : nil
+
+        if hasAudio {
+            DevCamLogger.export.debug("Audio track detected, will stitch audio with video")
+        }
+
         var currentTime = CMTime.zero
 
         for segment in segments {
@@ -293,6 +419,13 @@ class ClipExporter: NSObject, ObservableObject {
 
             do {
                 try videoTrack.insertTimeRange(timeRange, of: assetVideoTrack, at: currentTime)
+
+                // Insert audio track if available (gracefully skip segments without audio)
+                if let audioTrack = audioTrack,
+                   let assetAudioTrack = asset.tracks(withMediaType: .audio).first {
+                    try audioTrack.insertTimeRange(timeRange, of: assetAudioTrack, at: currentTime)
+                }
+
                 currentTime = CMTimeAdd(currentTime, asset.duration)
             } catch {
                 DevCamLogger.export.notice(

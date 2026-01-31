@@ -8,9 +8,8 @@ This guide covers setting up your development environment and building DevCam.
 - Xcode 14.0 or later
   - Download from the Mac App Store or Apple Developer
   - Includes Swift 5.9+ compiler
-  - Must include macOS 13.0+ SDK
-- macOS 13.0 or later (Ventura+)
-  - Required for ScreenCaptureKit and ServiceManagement frameworks
+- macOS 13.0 or later
+  - Required for ScreenCaptureKit and ServiceManagement
   - Development and testing must be on 13.0+
 - Apple Developer account (optional for distribution)
   - Free tier is sufficient for local development
@@ -133,14 +132,14 @@ xcodebuild test -scheme DevCam -destination 'platform=macOS'
 ```
 
 ### Manual Testing (Recommended)
-Status: Shortcuts are app-local; recording quality selection is implemented. Global shortcuts and buffer/display settings are not.
+Status: Shortcuts are reliable when DevCam is active; global shortcuts are best-effort. Recording quality changes apply after restart.
 Before release:
 1. Cold start: grant permissions, choose location
 2. Recording: confirm recording starts automatically
 3. Buffer rotation: record 20+ minutes
-4. Clip export: save 1-15 minute clips via the menubar slider
+4. Clip export: save 5, 10, 15 minute clips
 5. Shortcuts: verify they work when DevCam is active
-6. Preferences: change settings and verify persistence on next launch
+6. Preferences: change settings and verify save location/notifications apply immediately and quality applies after restart
 7. Low disk space: test < 2 GB available
 8. Display changes: connect and disconnect monitors
 9. System sleep: verify pause and resume

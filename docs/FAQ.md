@@ -1,6 +1,6 @@
 # DevCam FAQ
 
-Status: Answers reflect current behavior.
+Status: Answers reflect current behavior; items marked (Planned) are not implemented.
 
 ## Does DevCam upload my recordings?
 No. DevCam does not send data to the internet and stores everything locally.
@@ -9,16 +9,8 @@ No. DevCam does not send data to the internet and stores everything locally.
 The rolling buffer keeps the last 15 minutes of screen activity. Saved clips
 remain until you delete them.
 
-## Can I save clips other than 5, 10, or 15 minutes?
-Yes. The menubar Save Clip slider supports 1-15 minute exports in 1-minute steps.
-The Advanced option lets you set a custom start/end range within the buffer.
-
 ## Can I change the buffer length?
 Not yet. The buffer is fixed at 15 minutes in current builds.
-
-## Can I change recording quality?
-Yes. Preferences → General lets you choose Low (720p), Medium (1080p), or High
-(native resolution). Changes apply after restart.
 
 ## Where are buffer files stored?
 `~/Library/Application Support/DevCam/buffer/`
@@ -40,7 +32,7 @@ Not currently. Recording only pauses on system sleep and resumes on wake.
 
 ## Can I record longer than 15 minutes?
 Not yet. Current builds only support saving the last 5, 10, or 15 minutes.
-Forward recording and longer clips are planned.
+Forward recording, longer clips, and a save-range selection UI are planned.
 
 ## Is DevCam open source?
 Not yet. The repository will be public on GitHub (coming soon).

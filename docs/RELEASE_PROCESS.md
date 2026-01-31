@@ -40,7 +40,7 @@ Tag format:
   - Preferences and shortcut changes
 
 ### Build Settings
-- Confirm deployment target is macOS 12.3+
+- Confirm deployment target is macOS 13.0+
 - Ensure Release configuration is selected
 - Verify signing and capabilities are correct
 

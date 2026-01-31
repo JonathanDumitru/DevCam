@@ -6,18 +6,23 @@
 //
 
 import SwiftUI
+import CoreMedia
 
 struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
     @ObservedObject var settings: AppSettings
     let bufferManager: BufferManager
+    @ObservedObject var windowCaptureManager: WindowCaptureManager
+    @ObservedObject var settings: AppSettings
+    let onSelectWindows: () -> Void
 
     let onPreferences: () -> Void
     let onQuit: () -> Void
 
     @State private var selectedDuration: Double = 300 // Default 5 minutes (in seconds)
     @State private var showAdvancedWindow = false
+    @State private var isPreparingPreview = false
 
     // Display selection state
     @State private var availableDisplays: [(id: UInt32, name: String, width: Int, height: Int)] = []
@@ -32,8 +37,8 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Display selection (quick switch)
-            displaySelectionSection
+            // Capture mode
+            captureModeSection
 
             Divider()
 
@@ -154,41 +159,61 @@ struct MenuBarView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Display Selection Section
+    // MARK: - Capture Mode Section
 
-    private var displaySelectionSection: some View {
-        VStack(spacing: 4) {
-            Menu {
-                ForEach(availableDisplays, id: \.id) { display in
-                    Button {
-                        handleDisplaySelection(display.id)
-                    } label: {
-                        HStack {
-                            Text("\(display.name) (\(display.width)×\(display.height))")
-                            if display.id == currentDisplayID {
-                                Image(systemName: "checkmark")
-                            }
-                        }
+    private var captureModeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Capture Mode")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+
+            VStack(spacing: 4) {
+                // Display option
+                Button(action: {
+                    settings.captureMode = .display
+                }) {
+                    HStack {
+                        Image(systemName: settings.captureMode == .display ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(settings.captureMode == .display ? .accentColor : .secondary)
+                        Text("Display")
+                        Spacer()
                     }
-                    .disabled(display.id == currentDisplayID)
                 }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
 
-                if availableDisplays.isEmpty {
-                    Text("No displays detected")
-                        .foregroundColor(.secondary)
+                // Windows option
+                Button(action: {
+                    settings.captureMode = .windows
+                }) {
+                    HStack {
+                        Image(systemName: settings.captureMode == .windows ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(settings.captureMode == .windows ? .accentColor : .secondary)
+                        Text("Windows")
+                        if !windowCaptureManager.selectedWindows.isEmpty {
+                            Text("(\(windowCaptureManager.selectedWindows.count))")
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
                 }
-            } label: {
-                HStack {
-                    Image(systemName: "display")
-                        .font(.system(size: 11))
-                    Text(currentDisplayLabel)
-                        .font(.system(size: 12))
-                    Spacer()
-                    if isSwitchingDisplay {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    } else {
-                        Image(systemName: "chevron.up.chevron.down")
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+            }
+
+            // Select Windows button (when in windows mode)
+            if settings.captureMode == .windows {
+                Button(action: {
+                    onSelectWindows()
+                }) {
+                    HStack {
+                        Text("Select Windows...")
+                            .font(.system(size: 12))
+                        Spacer()
+                        Text("\u{2318}\u{21E7}W")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                     }
@@ -395,6 +420,26 @@ struct MenuBarView: View {
             .padding(.horizontal, 12)
             .disabled(!canSave())
 
+            // Preview button
+            Button(action: {
+                Task {
+                    await openPreviewWindow()
+                }
+            }) {
+                HStack {
+                    Text("Preview & Trim...")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Image(systemName: "eye")
+                        .font(.system(size: 10))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .disabled(!canSave() || isPreparingPreview)
+            .opacity((canSave() && !isPreparingPreview) ? 1.0 : 0.5)
+
             // Advanced button
             Button(action: {
                 showAdvancedWindow = true
@@ -429,6 +474,29 @@ struct MenuBarView: View {
     private func canSave() -> Bool {
         // Can save if we have any buffer content and not currently exporting
         return recordingManager.bufferDuration > 0 && !clipExporter.isExporting
+    }
+
+    private func openPreviewWindow() async {
+        isPreparingPreview = true
+        defer { isPreparingPreview = false }
+
+        do {
+            guard let previewURL = try await clipExporter.preparePreview(duration: selectedDuration) else {
+                return
+            }
+
+            await MainActor.run {
+                PreviewWindow.show(videoURL: previewURL) { timeRange in
+                    Task {
+                        try await clipExporter.exportClipWithRange(timeRange, from: previewURL)
+                        // Clean up temp file after export
+                        try? FileManager.default.removeItem(at: previewURL)
+                    }
+                }
+            }
+        } catch {
+            // Error handling - ClipExporter will have set exportError
+        }
     }
 
     // MARK: - Settings Section
@@ -467,12 +535,16 @@ struct MenuBarView: View {
         bufferManager: bufferManager,
         settings: settings
     )
+    let windowCaptureManager = WindowCaptureManager(settings: settings)
 
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
         settings: settings,
         bufferManager: bufferManager,
+        windowCaptureManager: windowCaptureManager,
+        settings: settings,
+        onSelectWindows: { },
         onPreferences: { },
         onQuit: { }
     )

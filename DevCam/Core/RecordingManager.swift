@@ -9,6 +9,7 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import CoreImage
 import ScreenCaptureKit
 import AVFoundation
 import Combine
@@ -113,6 +114,15 @@ class RecordingManager: NSObject, ObservableObject {
     private var systemLoadCancellable: AnyCancellable?
     private var adaptiveQualityReduced: Bool = false
 
+    // MARK: - Frame Rate Control
+
+    private var frameRateController: FrameRateController?
+    @Published private(set) var currentFrameRate: Int = 30
+
+    // MARK: - Window Capture
+
+    private var windowCaptureManager: WindowCaptureManager?
+
     // MARK: - Quality Degradation
 
     private var qualityDegradationAttempted: Bool = false
@@ -211,6 +221,19 @@ class RecordingManager: NSObject, ObservableObject {
             retryCount = 0
             qualityDegradationAttempted = false
             startWatchdog()
+
+            // Start adaptive frame rate if enabled
+            if settings.adaptiveFrameRateEnabled {
+                frameRateController = FrameRateController(settings: settings)
+                frameRateController?.onFrameRateChanged = { [weak self] newRate in
+                    Task { @MainActor in
+                        await self?.updateStreamFrameRate(newRate)
+                    }
+                }
+                frameRateController?.start()
+                currentFrameRate = settings.targetFrameRate.rawValue
+            }
+
             DevCamLogger.recording.info("Recording started successfully at \(self.settings.effectiveRecordingQuality.displayName) quality")
 
         } catch {
@@ -223,11 +246,17 @@ class RecordingManager: NSObject, ObservableObject {
     func stopRecording() async {
         guard isRecording else { return }
 
+        frameRateController?.stop()
+        frameRateController = nil
+
         segmentTimer?.invalidate()
         segmentTimer = nil
         stopWatchdog()
 
         await finalizeCurrentSegment()
+
+        // Stop window capture if active
+        await windowCaptureManager?.stopCapture()
 
         if let stream = stream {
             do {
@@ -295,6 +324,43 @@ class RecordingManager: NSObject, ObservableObject {
     // MARK: - ScreenCaptureKit Setup
 
     private func setupAndStartStream() async throws {
+        // Branch based on capture mode
+        if settings.captureMode == .windows,
+           let manager = windowCaptureManager,
+           !manager.selectedWindows.isEmpty {
+            try await setupWindowCapture()
+        } else {
+            try await setupDisplayCapture()
+        }
+    }
+
+    private func setupWindowCapture() async throws {
+        guard let manager = windowCaptureManager else {
+            throw RecordingError.streamSetupFailed
+        }
+
+        // Set output size on compositor based on quality settings
+        let effectiveQuality = settings.effectiveRecordingQuality
+        let resolution = effectiveQuality.scaleFactor == 1.0
+            ? CGSize(width: 1920, height: 1080) // Native: use 1080p default
+            : CGSize(
+                width: Int(1920 * effectiveQuality.scaleFactor),
+                height: Int(1080 * effectiveQuality.scaleFactor)
+            )
+        manager.setOutputSize(resolution)
+
+        // Update stored dimensions for AVAssetWriter
+        currentDisplayWidth = Int(resolution.width)
+        currentDisplayHeight = Int(resolution.height)
+
+        try await manager.startCapture()
+        try await startNewSegment()
+        scheduleSegmentRotation()
+
+        DevCamLogger.recording.info("Window capture started with \(manager.windowCount) windows at \(Int(resolution.width))x\(Int(resolution.height))")
+    }
+
+    private func setupDisplayCapture() async throws {
         let displays = try await getAvailableDisplays()
         DevCamLogger.recording.debug("Found \(displays.count) display(s)")
 
@@ -339,7 +405,7 @@ class RecordingManager: NSObject, ObservableObject {
                 CriticalAlertManager.sendAlert(.qualityDegraded(from: settings.recordingQuality, to: lowerQuality))
 
                 // Retry with lower quality
-                try await setupAndStartStream()
+                try await setupDisplayCapture()
                 return
             }
 
@@ -413,7 +479,7 @@ class RecordingManager: NSObject, ObservableObject {
 
         config.width = scaledWidth
         config.height = scaledHeight
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 60) // 60 fps
+        config.minimumFrameInterval = settings.targetFrameRate.frameInterval
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.colorSpaceName = CGColorSpace.sRGB
         config.queueDepth = 5
@@ -427,7 +493,7 @@ class RecordingManager: NSObject, ObservableObject {
             DevCamLogger.recording.debug("System audio capture enabled")
         }
 
-        DevCamLogger.recording.debug("Stream configured: \(scaledWidth)×\(scaledHeight) at \(self.settings.recordingQuality.displayName) quality")
+        DevCamLogger.recording.debug("Stream configured: \(scaledWidth)×\(scaledHeight) at \(self.settings.recordingQuality.displayName) quality, \(self.settings.targetFrameRate.rawValue) fps")
 
         return config
     }
@@ -561,6 +627,16 @@ class RecordingManager: NSObject, ObservableObject {
             return
         }
 
+        // Feed frame to FrameRateController for comparison during idle detection
+        if let frameRateController = frameRateController,
+           let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let context = CIContext()
+            if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
+                frameRateController.capturedFrame(cgImage)
+            }
+        }
+
         if input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
         } else {
@@ -584,6 +660,22 @@ class RecordingManager: NSObject, ObservableObject {
         }
     }
 
+    /// Updates the stream frame rate dynamically
+    private func updateStreamFrameRate(_ newRate: FrameRate) async {
+        guard let stream = stream else { return }
+
+        let config = SCStreamConfiguration()
+        config.minimumFrameInterval = newRate.frameInterval
+
+        do {
+            try await stream.updateConfiguration(config)
+            currentFrameRate = newRate.rawValue
+            DevCamLogger.recording.debug("Frame rate updated to \(newRate.rawValue) fps")
+        } catch {
+            DevCamLogger.recording.error("Failed to update frame rate: \(error.localizedDescription)")
+        }
+    }
+
     private func finalizeCurrentSegment() async {
         guard let writer = currentWriter,
               let input = currentWriterInput,
@@ -594,6 +686,8 @@ class RecordingManager: NSObject, ObservableObject {
 
         let duration = Date().timeIntervalSince(startTime)
 
+        // Mark audio input as finished before video to ensure proper stream finalization
+        currentAudioInput?.markAsFinished()
         input.markAsFinished()
 
         await writer.finishWriting()
@@ -619,6 +713,7 @@ class RecordingManager: NSObject, ObservableObject {
 
         currentWriter = nil
         currentWriterInput = nil
+        currentAudioInput = nil
         currentSegmentURL = nil
         currentSegmentStartTime = nil
         isWriterReady = false

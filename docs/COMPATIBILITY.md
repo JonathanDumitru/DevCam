@@ -1,7 +1,7 @@
 # DevCam Compatibility Guide
 
 ## Supported macOS
-- macOS 12.3+ (ScreenCaptureKit required)
+- macOS 13.0+ (ScreenCaptureKit required; launch at login uses SMAppService)
 
 ## Hardware
 - Apple Silicon: supported
@@ -26,8 +26,8 @@ Based on the current target profile (M1, 1080p, 60fps, 15-minute buffer):
 - Intel Macs with integrated graphics under heavy GPU load
 
 ## Known Behavior
-- Shortcuts are app-local; macOS may use Cmd-Shift-5/6/7 when DevCam is inactive.
-- Save location, notifications, and quality changes apply after restart.
+- Shortcuts are reliable when DevCam is active (Cmd-Option-5/6/7).
+- Save location and notifications apply immediately; recording quality changes apply after restart.
 
 ## Report Compatibility Issues
 Use `docs/FEEDBACK_TEMPLATE.md` and include your hardware and display details.

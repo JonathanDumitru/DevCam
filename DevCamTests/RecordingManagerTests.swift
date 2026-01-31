@@ -262,52 +262,154 @@ final class RecordingManagerTests: XCTestCase {
             settings: settings
         )
 
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        newRecordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // Should fall back to display capture when no windows selected
+        // In test mode, this should succeed
         try await newRecordingManager.startRecording()
-
-        // Initial mode
-        let initialMode = settings.displaySelectionMode
-
-        // Switch to a specific display
-        let targetDisplayID: UInt32 = 99999
-        try await newRecordingManager.switchDisplay(to: targetDisplayID)
-
-        // Settings should be updated
-        XCTAssertEqual(settings.displaySelectionMode, .specific, "Display mode should be .specific after switch")
-        XCTAssertEqual(settings.selectedDisplayID, targetDisplayID, "Selected display ID should match target")
+        XCTAssertTrue(newRecordingManager.isRecording, "Recording should fall back to display mode")
 
         await newRecordingManager.stopRecording()
-        await recordingManager.stopRecording()
     }
 
-    func testSwitchDisplayRestartsRecording() async throws {
+    func testWindowCaptureFallsBackToDisplayWhenNoManager() async throws {
+        // Set capture mode to windows but don't set a window capture manager
+        let settings = AppSettings()
+        settings.captureMode = .windows
+        settings.updateWindowSelection([
+            WindowSelection(windowID: 123, ownerName: "TestApp", windowTitle: "Test", isPrimary: true)
+        ])
+
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        // Don't set window capture manager - should fall back to display
+        // In test mode, this should succeed
+        try await newRecordingManager.startRecording()
+        XCTAssertTrue(newRecordingManager.isRecording, "Recording should fall back to display mode when no manager")
+
+        await newRecordingManager.stopRecording()
+    }
+
+    func testStopRecordingStopsWindowCapture() async throws {
+        let settings = AppSettings()
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        try await recordingManager.startRecording()
+        XCTAssertTrue(recordingManager.isRecording)
+
+        await recordingManager.stopRecording()
+        XCTAssertFalse(recordingManager.isRecording)
+
+        // Window capture manager should also be stopped
+        XCTAssertFalse(windowCaptureManager.isCapturing, "Window capture should be stopped")
+    }
+
+    // MARK: - Display Fallback Tests
+
+    func testSetWindowCaptureManagerSubscribesToAllWindowsClosedCallback() async throws {
+        let settings = AppSettings()
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // After setting the window capture manager, the onAllWindowsClosed callback should be set
+        XCTAssertNotNil(windowCaptureManager.onAllWindowsClosed, "onAllWindowsClosed callback should be subscribed")
+    }
+
+    func testFallbackToDisplayCaptureWhenNotRecording() async throws {
+        // When not recording, fallback should be a no-op (no crash)
+        let settings = AppSettings()
+        settings.captureMode = .windows
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        recordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        XCTAssertFalse(recordingManager.isRecording, "Should not be recording initially")
+
+        // Trigger the fallback callback - should not crash when not recording
+        windowCaptureManager.onAllWindowsClosed?()
+
+        // Give time for any async operations
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+
+        // Should still not be recording (fallback is no-op when not recording)
+        XCTAssertFalse(recordingManager.isRecording, "Should still not be recording")
+    }
+
+    func testFallbackSwitchesCaptureModeToDisplay() async throws {
+        let settings = AppSettings()
+        settings.captureMode = .windows
+
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        newRecordingManager.setWindowCaptureManager(windowCaptureManager)
+
+        // Start recording (in test mode)
+        try await newRecordingManager.startRecording()
+        XCTAssertTrue(newRecordingManager.isRecording, "Should be recording")
+
+        // Trigger fallback
+        windowCaptureManager.onAllWindowsClosed?()
+
+        // Give time for async fallback to complete
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+
+        // Capture mode should be switched to display
+        XCTAssertEqual(settings.captureMode, .display, "Capture mode should switch to display after fallback")
+
+        // Recording should continue (not stopped)
+        XCTAssertTrue(newRecordingManager.isRecording, "Recording should continue after fallback")
+
+        await newRecordingManager.stopRecording()
+    }
+
+    func testFallbackDoesNotCreateNewSegment() async throws {
+        // This test verifies that fallback maintains seamless continuity
+        // by not calling startNewSegment()
+        let settings = AppSettings()
+        settings.captureMode = .windows
+
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        let windowCaptureManager = WindowCaptureManager(settings: settings)
+        newRecordingManager.setWindowCaptureManager(windowCaptureManager)
+
         // Start recording
-        try await recordingManager.startRecording()
-        XCTAssertTrue(recordingManager.isRecording, "Should be recording before switch")
+        try await newRecordingManager.startRecording()
 
-        // Switch display
-        let fakeDisplayID: UInt32 = 54321
-        try await recordingManager.switchDisplay(to: fakeDisplayID)
+        // Wait for initial segment
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
 
-        // Recording should still be active after switch
-        XCTAssertTrue(recordingManager.isRecording, "Should still be recording after switch")
+        let segmentCountBefore = bufferManager.getAllSegments().count
 
-        await recordingManager.stopRecording()
-    }
+        // Trigger fallback
+        windowCaptureManager.onAllWindowsClosed?()
 
-    func testSwitchDisplayResetsBufferDuration() async throws {
-        // Start recording and wait for buffer duration to update
-        try await recordingManager.startRecording()
-        try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+        // Give time for fallback to complete
+        try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
 
-        // Verify published buffer duration is > 0
-        XCTAssertGreaterThan(recordingManager.bufferDuration, 0, "Buffer duration should be > 0")
+        let segmentCountAfter = bufferManager.getAllSegments().count
 
-        // Switch display
-        try await recordingManager.switchDisplay(to: 11111)
+        // Segment count should not increase immediately from fallback
+        // (Only normal segment rotation should create new segments)
+        XCTAssertEqual(segmentCountBefore, segmentCountAfter, "Fallback should not create a new segment")
 
-        // Published buffer duration should be reset
-        XCTAssertEqual(recordingManager.bufferDuration, 0, "Buffer duration should be 0 after switch")
-
-        await recordingManager.stopRecording()
+        await newRecordingManager.stopRecording()
     }
 }
