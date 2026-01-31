@@ -306,7 +306,7 @@ final class ExportReliabilityTests: XCTestCase {
         // (This tests the guard at the start of exportClip)
         // Note: In test mode, exports are fast, so this may complete before we can test
 
-        await export1.value
+        try await export1.value
         XCTAssertFalse(clipExporter.isExporting, "Should not be exporting after completion")
     }
 }

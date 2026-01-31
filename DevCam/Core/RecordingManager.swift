@@ -13,6 +13,7 @@ import ScreenCaptureKit
 import AVFoundation
 import Combine
 import OSLog
+import UserNotifications
 
 enum RecordingError: Error {
     case permissionDenied
@@ -155,11 +156,25 @@ class RecordingManager: NSObject, ObservableObject {
         if let wakeObserver = wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
-        stopAutoRecovery()
-        stopPermissionMonitoring()
-        stopPeriodicBufferValidation()
-        stopBatteryMonitoring()
-        stopAdaptiveQualityMonitoring()
+        // Timer invalidation must happen on MainActor
+        // Since deinit is nonisolated, schedule cleanup on MainActor
+        let autoRecoveryTimer = self.autoRecoveryTimer
+        let permissionMonitorTimer = self.permissionMonitorTimer
+        let bufferValidationTimer = self.bufferValidationTimer
+        let batteryCancellable = self.batteryCancellable
+        let batteryMonitor = self.batteryMonitor
+        let systemLoadCancellable = self.systemLoadCancellable
+        let systemLoadMonitor = self.systemLoadMonitor
+
+        Task { @MainActor in
+            autoRecoveryTimer?.invalidate()
+            permissionMonitorTimer?.invalidate()
+            bufferValidationTimer?.invalidate()
+            batteryCancellable?.cancel()
+            batteryMonitor?.stopMonitoring()
+            systemLoadCancellable?.cancel()
+            systemLoadMonitor?.stopMonitoring()
+        }
     }
 
     // MARK: - Public API
@@ -250,6 +265,31 @@ class RecordingManager: NSObject, ObservableObject {
     func resumeRecording() async throws {
         guard !isRecording else { return }
         try await startRecording()
+    }
+
+    /// Switches recording to a different display, clearing the buffer.
+    /// Call this after user confirms the switch (buffer will be lost).
+    ///
+    /// - Parameter displayID: The display ID to switch to
+    /// - Throws: RecordingError if restart fails
+    func switchDisplay(to displayID: UInt32) async throws {
+        DevCamLogger.recording.info("Switching to display \(displayID)")
+
+        // Stop current recording
+        await stopRecording()
+
+        // Clear buffer - no mixed-display clips
+        bufferManager.clearBuffer()
+        bufferDuration = 0
+
+        // Update settings
+        settings.selectedDisplayID = displayID
+        settings.displaySelectionMode = .specific
+
+        // Restart on new display
+        try await startRecording()
+
+        DevCamLogger.recording.info("Successfully switched to display \(displayID)")
     }
 
     // MARK: - ScreenCaptureKit Setup
@@ -1135,6 +1175,81 @@ class RecordingManager: NSObject, ObservableObject {
         let totalDuration = bufferManager.getCurrentBufferDuration()
         self.bufferDuration = totalDuration
     }
+
+    // MARK: - Display Disconnect Handling
+
+    /// Checks if an error indicates the display was disconnected.
+    /// ScreenCaptureKit returns specific error codes when the source display is no longer available.
+    private func isDisplayDisconnectedError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+
+        // ScreenCaptureKit domain errors for display issues
+        // Common codes: -3814 (display not available), -3815 (source changed)
+        if nsError.domain == "com.apple.ScreenCaptureKit" {
+            let displayErrors: Set<Int> = [-3814, -3815, -3816]
+            return displayErrors.contains(nsError.code)
+        }
+
+        // Also check for IOSurface errors related to display disconnect
+        if nsError.domain == "IOSurface" {
+            return true
+        }
+
+        // Check error description for display-related keywords
+        let description = error.localizedDescription.lowercased()
+        return description.contains("display") && (
+            description.contains("disconnect") ||
+            description.contains("not available") ||
+            description.contains("removed")
+        )
+    }
+
+    /// Handles display disconnection by switching to primary display.
+    /// Called when the currently recording display is no longer available.
+    private func handleDisplayDisconnect() async {
+        DevCamLogger.recording.warning("Display disconnected, switching to primary")
+
+        // Clear buffer - can't have mixed-display clips
+        bufferManager.clearBuffer()
+        bufferDuration = 0
+
+        // Switch to primary mode
+        settings.displaySelectionMode = .primary
+
+        // Restart recording on primary display
+        do {
+            try await startRecording()
+            sendDisplayDisconnectedNotification()
+            DevCamLogger.recording.info("Successfully switched to primary display after disconnect")
+        } catch {
+            DevCamLogger.recording.error("Failed to recover from display disconnect: \(error.localizedDescription)")
+            recordingError = error
+            scheduleAutoRecovery()
+        }
+    }
+
+    /// Sends a notification to the user that the display was disconnected and recording has switched.
+    private func sendDisplayDisconnectedNotification() {
+        guard settings.showNotifications else { return }
+
+        CriticalAlertManager.sendAlert(.recordingRecovered)
+
+        // Also send a user-facing notification
+        Task {
+            let content = UNMutableNotificationContent()
+            content.title = "Display Disconnected"
+            content.body = "Recording switched to primary display. Buffer was cleared."
+            content.sound = .default
+
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+
+            try? await UNUserNotificationCenter.current().add(request)
+        }
+    }
 }
 
 // MARK: - SCStreamDelegate
@@ -1145,10 +1260,18 @@ extension RecordingManager: SCStreamDelegate {
     /// **Thread Safety**: Callbacks arrive off-main; hop to @MainActor before touching state.
     ///
     /// **Retry Strategy**: Exponential backoff (1s, 2s, 4s) before giving up.
+    /// **Display Disconnect**: Special handling for display disconnection errors.
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         Task { @MainActor in
             DevCamLogger.recording.error("Stream stopped with error: \(String(describing: error), privacy: .public)")
             self.recordingError = error
+
+            // Check for display disconnection - handle specially
+            if isDisplayDisconnectedError(error) {
+                DevCamLogger.recording.warning("Detected display disconnect, switching to primary")
+                await handleDisplayDisconnect()
+                return
+            }
 
             if retryCount < maxRetries {
                 let backoffDelay = pow(2.0, Double(retryCount)) // 1s, 2s, 4s

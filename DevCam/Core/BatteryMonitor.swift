@@ -8,6 +8,7 @@
 import Foundation
 import IOKit.ps
 import Combine
+import OSLog
 
 /// Battery state information
 struct BatteryState {

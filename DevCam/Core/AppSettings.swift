@@ -185,7 +185,16 @@ class AppSettings: ObservableObject {
     // MARK: - Display Settings (Phase 4)
 
     @AppStorage("displaySelectionMode") var displaySelectionMode: DisplaySelectionMode = .primary
-    @AppStorage("selectedDisplayID") var selectedDisplayID: UInt32 = 0
+    @AppStorage("selectedDisplayID") private var _selectedDisplayID: Int = 0
+
+    /// The display ID to record from when in .specific mode
+    var selectedDisplayID: UInt32 {
+        get { UInt32(_selectedDisplayID) }
+        set {
+            _selectedDisplayID = Int(newValue)
+            objectWillChange.send()
+        }
+    }
 
     // MARK: - Audio Settings (Phase 4)
 

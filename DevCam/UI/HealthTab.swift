@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HealthTab: View {
     @ObservedObject var healthStats: HealthStats

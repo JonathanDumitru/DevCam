@@ -225,4 +225,89 @@ final class RecordingManagerTests: XCTestCase {
         // This is more of a placeholder for manual testing
         XCTAssertTrue(true, "Memory test completed")
     }
+
+    // MARK: - Display Switch Tests
+
+    func testSwitchDisplayClearsBuffer() async throws {
+        // Start recording and accumulate some buffer
+        try await recordingManager.startRecording()
+        try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+
+        // Verify we have buffer content
+        let durationBefore = await bufferManager.getCurrentBufferDuration()
+        XCTAssertGreaterThan(durationBefore, 0, "Should have buffer content before switch")
+
+        // Get a display ID to switch to (in test mode, we use a fake ID)
+        let fakeDisplayID: UInt32 = 12345
+
+        // Switch display
+        try await recordingManager.switchDisplay(to: fakeDisplayID)
+
+        // Buffer should be cleared
+        let durationAfter = await bufferManager.getCurrentBufferDuration()
+        XCTAssertEqual(durationAfter, 0, "Buffer should be cleared after display switch")
+
+        await recordingManager.stopRecording()
+    }
+
+    func testSwitchDisplayUpdatesSettings() async throws {
+        // Start recording
+        try await recordingManager.startRecording()
+
+        // Get reference to settings
+        let settings = AppSettings()
+        let newRecordingManager = RecordingManager(
+            bufferManager: bufferManager,
+            permissionManager: permissionManager,
+            settings: settings
+        )
+
+        try await newRecordingManager.startRecording()
+
+        // Initial mode
+        let initialMode = settings.displaySelectionMode
+
+        // Switch to a specific display
+        let targetDisplayID: UInt32 = 99999
+        try await newRecordingManager.switchDisplay(to: targetDisplayID)
+
+        // Settings should be updated
+        XCTAssertEqual(settings.displaySelectionMode, .specific, "Display mode should be .specific after switch")
+        XCTAssertEqual(settings.selectedDisplayID, targetDisplayID, "Selected display ID should match target")
+
+        await newRecordingManager.stopRecording()
+        await recordingManager.stopRecording()
+    }
+
+    func testSwitchDisplayRestartsRecording() async throws {
+        // Start recording
+        try await recordingManager.startRecording()
+        XCTAssertTrue(recordingManager.isRecording, "Should be recording before switch")
+
+        // Switch display
+        let fakeDisplayID: UInt32 = 54321
+        try await recordingManager.switchDisplay(to: fakeDisplayID)
+
+        // Recording should still be active after switch
+        XCTAssertTrue(recordingManager.isRecording, "Should still be recording after switch")
+
+        await recordingManager.stopRecording()
+    }
+
+    func testSwitchDisplayResetsBufferDuration() async throws {
+        // Start recording and wait for buffer duration to update
+        try await recordingManager.startRecording()
+        try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+
+        // Verify published buffer duration is > 0
+        XCTAssertGreaterThan(recordingManager.bufferDuration, 0, "Buffer duration should be > 0")
+
+        // Switch display
+        try await recordingManager.switchDisplay(to: 11111)
+
+        // Published buffer duration should be reset
+        XCTAssertEqual(recordingManager.bufferDuration, 0, "Buffer duration should be 0 after switch")
+
+        await recordingManager.stopRecording()
+    }
 }

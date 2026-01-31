@@ -12,7 +12,7 @@ import AVFoundation
 import UserNotifications
 import OSLog
 
-enum ExportError: Error {
+enum ExportError: Error, Equatable {
     case noSegmentsAvailable
     case insufficientBufferContent
     case compositionFailed
