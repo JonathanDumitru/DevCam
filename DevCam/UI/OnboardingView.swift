@@ -67,12 +67,14 @@ struct OnboardingView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 } else {
                     Button("Get Started") {
                         markOnboardingComplete()
                         onComplete()
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(!permissionManager.hasScreenRecordingPermission)
                 }
             }
@@ -100,6 +102,7 @@ struct WelcomePage: View {
             Image(systemName: "record.circle.fill")
                 .font(.system(size: 64))
                 .foregroundColor(.red)
+                .accessibilityHidden(true)
 
             Text("Welcome to DevCam")
                 .font(.largeTitle)
@@ -225,11 +228,13 @@ struct PermissionPage: View {
                         permissionManager.requestScreenRecordingPermission()
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
 
                     Button("Open System Settings") {
                         permissionManager.openSystemSettings()
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
 
                 Button("Check Again") {
@@ -252,7 +257,7 @@ struct PermissionStep: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("\(number)")
-                .font(.caption)
+                .font(.caption2)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
                 .frame(width: 20, height: 20)
@@ -260,7 +265,7 @@ struct PermissionStep: View {
                 .clipShape(Circle())
 
             Text(text)
-                .font(.subheadline)
+                .font(.callout)
         }
     }
 }

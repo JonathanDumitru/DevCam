@@ -16,7 +16,7 @@ struct DisplaySwitchConfirmationView: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "display.2")
-                .font(.system(size: 32))
+                .font(.title)
                 .foregroundColor(.blue)
 
             Text("Switch Display?")

@@ -1,6 +1,6 @@
 # DevCam Shortcuts
 
-Status: Shortcuts are implemented; global monitoring is best-effort in sandbox builds.
+Status: System-wide shortcuts are implemented; customization is not available.
 
 ## Default Shortcuts
 - Save last 5 minutes: Command-Option-5
@@ -8,12 +8,13 @@ Status: Shortcuts are implemented; global monitoring is best-effort in sandbox b
 - Save last 15 minutes: Command-Option-7
 
 ## Behavior
-- Shortcuts are reliable when DevCam is the active app (popover open).
-- Global shortcuts may not fire in sandboxed builds; use the menubar menu if needed.
+- Shortcuts are global and work even when DevCam is not focused.
+- Global monitors cannot consume events, so the keystroke still reaches the active app.
 
 ## Customizing Shortcuts
 Not supported in current builds.
 
 ## Tips
-- Use the menubar menu if you are not actively focused in DevCam.
-- If a shortcut does nothing, click the menubar icon and try again.
+- Use the menubar menu if a shortcut conflicts with another app.
+- The Save Clip slider supports 1-15 minute exports in 1-minute steps.
+- Advanced... allows timeline trim or custom durations with annotations.

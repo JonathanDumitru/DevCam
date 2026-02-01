@@ -8,8 +8,9 @@ This guide covers setting up your development environment and building DevCam.
 - Xcode 14.0 or later
   - Download from the Mac App Store or Apple Developer
   - Includes Swift 5.9+ compiler
-- macOS 13.0 or later
-  - Required for ScreenCaptureKit and ServiceManagement
+  - Must include macOS 13.0+ SDK
+- macOS 13.0 or later (Ventura+)
+  - Required for ScreenCaptureKit and ServiceManagement frameworks
   - Development and testing must be on 13.0+
 - Apple Developer account (optional for distribution)
   - Free tier is sufficient for local development
@@ -116,9 +117,9 @@ DevCam requires these entitlements (DevCam.entitlements):
 <true/>
 ```
 
-DevCam does not enable the App Sandbox.
+DevCam enables the App Sandbox.
 
-Note: network entitlements apply only to sandboxed apps; DevCam does not include network features.
+Note: DevCam does not include network entitlements or network features.
 
 ## Running Tests
 
@@ -132,14 +133,14 @@ xcodebuild test -scheme DevCam -destination 'platform=macOS'
 ```
 
 ### Manual Testing (Recommended)
-Status: Shortcuts are reliable when DevCam is active; global shortcuts are best-effort. Recording quality changes apply after restart.
+Status: Shortcuts are system-wide; recording quality selection, display selection, and launch at login are implemented. Audio export and all-displays capture are not.
 Before release:
 1. Cold start: grant permissions, choose location
 2. Recording: confirm recording starts automatically
 3. Buffer rotation: record 20+ minutes
-4. Clip export: save 5, 10, 15 minute clips
-5. Shortcuts: verify they work when DevCam is active
-6. Preferences: change settings and verify save location/notifications apply immediately and quality applies after restart
+4. Clip export: save 1-15 minute clips via the menubar slider
+5. Shortcuts: verify Cmd-Option-5/6/7 work system-wide
+6. Preferences: change settings and verify persistence on next launch
 7. Low disk space: test < 2 GB available
 8. Display changes: connect and disconnect monitors
 9. System sleep: verify pause and resume

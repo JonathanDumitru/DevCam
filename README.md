@@ -14,7 +14,7 @@ Ever wish you could hit "save" *after* something interesting happened on your sc
 
 **The Problem:** Bugs appear and disappear. Perfect demos happen when you're not recording. Tutorial-worthy workflows emerge organically, but you didn't hit "record" in time.
 
-**The Solution:** DevCam runs quietly in your menubar, continuously recording your screen at 60fps. When something worth keeping happens, use the menubar Save Clip slider for 1-15 minutes, or press `⌘⌥5`/`⌘⌥6`/`⌘⌥7` for 5/10/15 minutes while DevCam is active. DevCam instantly exports that timeframe to a file, then keeps recording.
+**The Solution:** DevCam runs quietly in your menubar, continuously recording your screen at 60fps. When something worth keeping happens, use the menubar Save Clip slider for 1-15 minutes, or press `⌘⌥5`/`⌘⌥6`/`⌘⌥7` for 5/10/15 minutes. DevCam instantly exports that timeframe to a file, then keeps recording.
 
 **The Guarantee:** Everything stays on your Mac. Zero network connections. Zero telemetry. Zero cloud storage. Your screen recordings never leave your device.
 
@@ -22,10 +22,12 @@ Ever wish you could hit "save" *after* something interesting happened on your sc
 
 - ✅ **Continuous 60fps screen recording** with automatic buffer management
 - ✅ **Rolling 15-minute buffer** that self-manages disk space and memory
-- ✅ **Retroactive save** for 1-15 minutes via menubar; shortcuts for 5/10/15 when active
+- ✅ **Retroactive save** for 1-15 minutes via menubar; system-wide shortcuts for 5/10/15 minutes
 - ✅ **Native macOS menubar app** built with Swift and SwiftUI
-- ✅ **Preferences window** with clips browser and settings management
+- ✅ **Preferences window** with recording, clips, health, and privacy tabs
 - ✅ **Recording quality selection** (Low/Medium/High)
+- ✅ **Display selection** with safe switching (buffer cleared on switch)
+- ✅ **Adaptive quality + battery-aware recording** modes
 - ✅ **System integration** handles sleep/wake events
 - ✅ **Real-time export progress** with notifications on completion
 - ✅ **100% local and private** - no network connections, no telemetry, no cloud
@@ -61,11 +63,11 @@ Build in Xcode (`⌘B`) or run directly (`⌘R`). See [Building from Source](#bu
 
 ### Saving Clips
 
-**Keyboard Shortcuts (when DevCam is active):**
+**Keyboard Shortcuts (system-wide):**
 - `⌘⌥5` - Save last 5 minutes
 - `⌘⌥6` - Save last 10 minutes
 - `⌘⌥7` - Save last 15 minutes
-Shortcuts are reliable when the DevCam menubar popover is open.
+Shortcuts work from any application.
 
 **Menubar Menu:**
 - Click the DevCam menubar icon
@@ -107,8 +109,10 @@ DevCam handles macOS system events:
 
 Open Preferences from the menubar menu:
 
-- **General Tab:** Configure save location, recording quality, launch at login (preference only), notification preferences
+- **General Tab:** Configure save location, recording quality, launch at login, notification preferences
+- **Recording Tab:** Display selection, audio capture toggle, adaptive quality, battery mode
 - **Clips Tab:** Browse, preview, and manage saved clips
+- **Health Tab:** Session/lifetime stats and error history
 - **Privacy Tab:** Screen recording permission status and privacy details
 
 See [Settings Reference](docs/SETTINGS.md) for complete configuration options.
@@ -133,7 +137,7 @@ See [Architecture Guide](docs/ARCHITECTURE.md) for deep technical details.
 - **Frame Rate:** 60fps for smooth playback of fast screen changes
 - **Bitrate:** ~16 Mbps for 1080p (calculated as `width × height × 0.15 × fps`)
 - **Container:** MPEG-4 (`.mp4`) format
-- **Audio:** No audio capture (screen recording only)
+- **Audio:** System audio capture toggle available; exported clips are currently video-only
 
 ### Performance
 
@@ -150,7 +154,7 @@ Performance scales with screen resolution. See [Architecture Guide](docs/ARCHITE
 
 DevCam has **zero external dependencies**. It uses only Apple-provided frameworks:
 
-- **ScreenCaptureKit** - Screen capture and recording (introduced in macOS 12.3; app targets macOS 13.0+)
+- **ScreenCaptureKit** - Screen capture and recording (macOS 12.3+; app targets 13.0+)
 - **AVFoundation** - Video encoding and export
 - **SwiftUI** - User interface
 - **AppKit** - Menubar integration and system events
@@ -325,7 +329,7 @@ See the [LICENSE](LICENSE) file for full terms.
 
 ## Acknowledgments
 
-DevCam is built with Apple's **ScreenCaptureKit** framework, introduced in macOS 12.3 (Monterey). DevCam targets macOS 13.0+ to support ServiceManagement login items while using ScreenCaptureKit for high-performance, low-latency capture that replaces the deprecated `CGWindowListCreateImage` approach.
+DevCam is built with Apple's **ScreenCaptureKit** framework, introduced in macOS 12.3 (Monterey). ScreenCaptureKit provides high-performance, low-latency screen capture with modern APIs that replaced the deprecated `CGWindowListCreateImage` approach.
 
 **Technology Stack:**
 - **Swift** - Pure Swift implementation with no Objective-C bridging

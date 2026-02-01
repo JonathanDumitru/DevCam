@@ -76,7 +76,7 @@ struct RecordingTab: View {
                 .pickerStyle(.radioGroup)
 
                 Text(settings.displaySelectionMode.description)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundColor(.secondary)
 
                 // Show display picker when specific mode is selected
@@ -144,10 +144,10 @@ struct RecordingTab: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(display.name)
-                            .font(.system(size: 13))
+                            .font(.body)
 
                         Text("\(display.width) x \(display.height)")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
                     }
 
@@ -256,7 +256,7 @@ struct RecordingTab: View {
                 .pickerStyle(.radioGroup)
 
                 Text(settings.audioCaptureMode.description)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundColor(.secondary)
 
                 if settings.audioCaptureMode.capturesSystemAudio {
@@ -289,7 +289,7 @@ struct RecordingTab: View {
 
                 if settings.adaptiveQualityEnabled {
                     Text("When CPU usage is high, recording quality will be temporarily reduced to maintain smooth capture.")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
 
                     Divider()
@@ -340,7 +340,7 @@ struct RecordingTab: View {
                 .pickerStyle(.radioGroup)
 
                 Text(settings.batteryMode.description)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundColor(.secondary)
 
                 if settings.batteryMode == .pauseOnLow {

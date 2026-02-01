@@ -3,7 +3,7 @@
 This document provides an in-depth look at DevCam's architecture, component
 interactions, and design decisions.
 
-Status: RecordingManager, BufferManager, ClipExporter, AppSettings, and the menubar/preferences UI are implemented. Some settings and shortcuts are not yet wired; global shortcuts are best-effort in sandboxed builds.
+Status: RecordingManager, BufferManager, ClipExporter, AppSettings, and the menubar/preferences UI are implemented. Recording quality selection, global shortcuts, launch at login, display selection, adaptive quality, and battery monitoring are wired. All-displays capture and microphone recording remain unimplemented.
 
 ## System Overview
 
@@ -11,7 +11,7 @@ DevCam is a native macOS menubar application built with Swift, SwiftUI, and
 ScreenCaptureKit. The architecture follows an MVVM-style separation between UI,
 recording, buffering, and export workflows.
 
-Note: Diagrams reflect current wiring; some UI settings are stubs (for example, shortcut customization).
+Note: Diagrams reflect current wiring; some UI settings are stubs (for example, all-displays capture, microphone capture, and shortcut customization).
 
 ```
 +-------------------------------------------------------------+
@@ -46,7 +46,7 @@ Purpose: Coordinates ScreenCaptureKit stream and video encoding.
 
 Responsibilities:
 - Initialize SCStream with optimal configuration (60fps, H.264, native size)
-- Provide a VideoStreamOutput to receive frame buffers
+- Implement SCStreamOutput to receive frame buffers
 - Create 1-minute segments using AVAssetWriter
 - Rotate segments and register with BufferManager
 - Manage recording lifecycle (start, stop, restart)
@@ -155,8 +155,38 @@ saveLocation: URL
 launchAtLogin: Bool
 showNotifications: Bool
 bufferDurationSeconds: Int
+recordingQuality: RecordingQuality
 shortcuts: [ShortcutAction: KeyboardShortcutConfig]
 ```
+
+### 5. LaunchAtLoginManager
+
+Purpose: Manages launch at login functionality using macOS ServiceManagement framework.
+
+Implementation:
+- Uses `SMAppService.mainApp` (macOS 13.0+) for login item registration
+- Eliminates need for separate helper app or launch agent
+- Singleton pattern for app-wide access
+- Thread-safe operations
+
+Key methods:
+```swift
+func enable() throws  // Register app as login item
+func disable() throws // Unregister app from login items
+var isEnabled: Bool   // Query current system state
+```
+
+Design rationale:
+- **Modern API**: Uses ServiceManagement instead of deprecated LSSharedFileList
+- **No helper app**: SMAppService.mainApp registers the main bundle directly
+- **System integration**: Appears in System Settings > General > Login Items
+- **State sync**: AppSettings checks isEnabled on init to handle manual changes
+- **Atomic operations**: Both UserDefaults and system registration succeed or revert together
+
+Error handling:
+- Throws on registration/unregistration failures
+- AppSettings reverts preference on error
+- UI displays alert with guidance to System Settings
 
 ## Data Flow Examples
 
@@ -189,19 +219,16 @@ the intended project layout.
 ```
 RecordingManager (DevCam/Core/RecordingManager.swift)
   - conforms to: ObservableObject
+  - conforms to: SCStreamOutput
   - conforms to: SCStreamDelegate
   - owns: SCStream, AVAssetWriter, AVAssetWriterInput
-
-VideoStreamOutput (DevCam/Core/RecordingManager.swift)
-  - conforms to: SCStreamOutput
-  - forwards frames to RecordingManager on the main actor
 
 BufferManager (DevCam/Core/BufferManager.swift)
   - @MainActor class for segment metadata and disk cleanup
 
 ClipExporter (DevCam/Core/ClipExporter.swift)
   - ObservableObject
-  - owns: AVAssetExportSession
+  - owns: AVAssetExportSession, Timer
 
 AppSettings (DevCam/Core/AppSettings.swift)
   - ObservableObject
@@ -215,7 +242,7 @@ ClipInfo (DevCam/Models/ClipInfo.swift)
 
 MenuBarView (DevCam/UI/MenuBarView.swift)
   - SwiftUI view
-  - binds to: RecordingManager, ClipExporter
+  - binds to: RecordingManager, ClipExporter, AppSettings
 ```
 
 ### Interaction Diagram (Runtime)
@@ -384,11 +411,12 @@ Memory:
 
 Permissions:
 - Screen recording permission required (enforced by macOS)
-- App Sandbox not enabled; app runs with standard user permissions
+- App Sandbox enabled with screen capture and user-selected read/write entitlements
 
 File access:
 - Buffer directory managed by the app
-- Clip export is designed to use a user-selected folder (not OS-enforced)
+- Clip export uses a user-selected folder chosen via NSOpenPanel
+- Save location is persisted as a path (no security-scoped bookmark handling yet)
 
 Network:
 - No network features by design
@@ -397,16 +425,16 @@ Network:
 ## Extensibility
 
 Audio recording:
-- Add AVAssetWriterInput for audio
-- Capture system audio via ScreenCaptureKit
+- System audio capture via ScreenCaptureKit is implemented
+- Microphone capture and audio export stitching are not implemented
 
 Multi-display:
-- Expose display selection in Preferences
-- Create separate streams per display if needed
+- Display selection in Preferences is implemented
+- All-displays capture and multi-stream compositing are not implemented
 
 Clip trimming:
-- Add a trim UI in the export flow
-- Use AVMutableComposition for time slicing
+- Advanced clip window supports timeline trim and custom duration
+- Preview and audio-inclusive trimming remain future work
 
 ## Conclusion
 

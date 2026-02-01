@@ -1,6 +1,6 @@
 # DevCam Privacy Policy
 
-Last updated: 2026-01-26
+Last updated: 2026-01-31
 
 ## Our Privacy Commitment
 DevCam is designed with privacy as a core principle. Your recordings are yours
@@ -60,6 +60,18 @@ How it is used:
 
 Revoke any time:
 - System Settings -> Privacy and Security -> Screen Recording
+
+### Audio (Optional)
+Why it is needed:
+- System audio capture can be enabled from Preferences > Recording
+
+How it is used:
+- System audio is captured via ScreenCaptureKit when enabled
+- Microphone capture is not implemented yet
+- Exported clips are currently video-only
+
+Revoke any time:
+- System Settings -> Privacy and Security -> Microphone
 
 ### File System Access
 Why it is needed:

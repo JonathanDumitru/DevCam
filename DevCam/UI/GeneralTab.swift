@@ -22,7 +22,7 @@ struct GeneralTab: View {
 
                     HStack {
                         Text(settings.saveLocation.path)
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -32,11 +32,13 @@ struct GeneralTab: View {
                         Button("Choose...") {
                             chooseSaveLocation()
                         }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
 
                     if !settings.validateSaveLocation() {
                         Label("Location is not writable", systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.orange)
                     }
                 }
@@ -61,14 +63,14 @@ struct GeneralTab: View {
                     }
 
                     Text(settings.recordingQuality.description)
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Only show warning if quality has actually changed from initial value
                     if let initial = initialQuality, settings.recordingQuality != initial {
                         Label("Restart DevCam to apply new quality setting", systemImage: "info.circle.fill")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.orange)
                     }
                 }
@@ -98,11 +100,11 @@ struct GeneralTab: View {
                         .font(.headline)
 
                     Text("Version 1.0.0")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
 
                     Text("A developer body camera for capturing screen activity")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }

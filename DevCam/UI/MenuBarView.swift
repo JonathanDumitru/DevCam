@@ -6,23 +6,18 @@
 //
 
 import SwiftUI
-import CoreMedia
 
 struct MenuBarView: View {
     @ObservedObject var recordingManager: RecordingManager
     @ObservedObject var clipExporter: ClipExporter
     @ObservedObject var settings: AppSettings
     let bufferManager: BufferManager
-    @ObservedObject var windowCaptureManager: WindowCaptureManager
-    @ObservedObject var settings: AppSettings
-    let onSelectWindows: () -> Void
 
     let onPreferences: () -> Void
     let onQuit: () -> Void
 
     @State private var selectedDuration: Double = 300 // Default 5 minutes (in seconds)
     @State private var showAdvancedWindow = false
-    @State private var isPreparingPreview = false
 
     // Display selection state
     @State private var availableDisplays: [(id: UInt32, name: String, width: Int, height: Int)] = []
@@ -37,8 +32,8 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Capture mode
-            captureModeSection
+            // Display selection (quick switch)
+            displaySelectionSection
 
             Divider()
 
@@ -88,7 +83,7 @@ struct MenuBarView: View {
             HStack {
                 statusIndicator
                 Text(statusText)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.headline)
                 Spacer()
             }
 
@@ -96,10 +91,10 @@ struct MenuBarView: View {
             if recordingManager.isInRecoveryMode {
                 HStack {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundColor(.orange)
                     Text("Auto-recovery in progress...")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.orange)
                     Spacer()
                 }
@@ -108,10 +103,10 @@ struct MenuBarView: View {
             if recordingManager.isQualityDegraded {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundColor(.yellow)
                     Text("Quality reduced due to system constraints")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
                 }
@@ -121,7 +116,7 @@ struct MenuBarView: View {
             if recordingManager.isRecording {
                 HStack {
                     Text(bufferStatusText)
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
 
@@ -135,7 +130,7 @@ struct MenuBarView: View {
                 VStack(spacing: 4) {
                     HStack {
                         Text("Exporting...")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                     }
@@ -148,7 +143,7 @@ struct MenuBarView: View {
             if let error = recordingManager.recordingError {
                 HStack {
                     Text(errorDescription(error))
-                        .font(.system(size: 10))
+                        .font(.caption2)
                         .foregroundColor(.orange)
                         .lineLimit(2)
                     Spacer()
@@ -159,62 +154,42 @@ struct MenuBarView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Capture Mode Section
+    // MARK: - Display Selection Section
 
-    private var captureModeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Capture Mode")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 12)
-
-            VStack(spacing: 4) {
-                // Display option
-                Button(action: {
-                    settings.captureMode = .display
-                }) {
-                    HStack {
-                        Image(systemName: settings.captureMode == .display ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(settings.captureMode == .display ? .accentColor : .secondary)
-                        Text("Display")
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-
-                // Windows option
-                Button(action: {
-                    settings.captureMode = .windows
-                }) {
-                    HStack {
-                        Image(systemName: settings.captureMode == .windows ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(settings.captureMode == .windows ? .accentColor : .secondary)
-                        Text("Windows")
-                        if !windowCaptureManager.selectedWindows.isEmpty {
-                            Text("(\(windowCaptureManager.selectedWindows.count))")
-                                .foregroundColor(.secondary)
+    private var displaySelectionSection: some View {
+        VStack(spacing: 4) {
+            Menu {
+                ForEach(availableDisplays, id: \.id) { display in
+                    Button {
+                        handleDisplaySelection(display.id)
+                    } label: {
+                        HStack {
+                            Text("\(display.name) (\(display.width)×\(display.height))")
+                            if display.id == currentDisplayID {
+                                Image(systemName: "checkmark")
+                            }
                         }
-                        Spacer()
                     }
+                    .disabled(display.id == currentDisplayID)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            }
 
-            // Select Windows button (when in windows mode)
-            if settings.captureMode == .windows {
-                Button(action: {
-                    onSelectWindows()
-                }) {
-                    HStack {
-                        Text("Select Windows...")
-                            .font(.system(size: 12))
-                        Spacer()
-                        Text("\u{2318}\u{21E7}W")
-                            .font(.system(size: 10))
+                if availableDisplays.isEmpty {
+                    Text("No displays detected")
+                        .foregroundColor(.secondary)
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "display")
+                        .font(.caption)
+                    Text(currentDisplayLabel)
+                        .font(.body)
+                    Spacer()
+                    if isSwitchingDisplay {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                    } else {
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -379,7 +354,7 @@ struct MenuBarView: View {
             // Title
             HStack {
                 Text("Save Clip")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.headline)
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -392,11 +367,11 @@ struct MenuBarView: View {
 
                 HStack {
                     Text(formatDuration(selectedDuration))
-                        .font(.system(size: 12))
+                        .font(.callout)
                         .foregroundColor(.secondary)
                     Spacer()
                     Text("Max: \(formatDuration(min(recordingManager.bufferDuration, 900)))")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12)
@@ -420,36 +395,16 @@ struct MenuBarView: View {
             .padding(.horizontal, 12)
             .disabled(!canSave())
 
-            // Preview button
-            Button(action: {
-                Task {
-                    await openPreviewWindow()
-                }
-            }) {
-                HStack {
-                    Text("Preview & Trim...")
-                        .font(.system(size: 12))
-                    Spacer()
-                    Image(systemName: "eye")
-                        .font(.system(size: 10))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .disabled(!canSave() || isPreparingPreview)
-            .opacity((canSave() && !isPreparingPreview) ? 1.0 : 0.5)
-
             // Advanced button
             Button(action: {
                 showAdvancedWindow = true
             }) {
                 HStack {
                     Text("Advanced...")
-                        .font(.system(size: 12))
+                        .font(.callout)
                     Spacer()
                     Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 10))
+                        .font(.caption2)
                 }
                 .contentShape(Rectangle())
             }
@@ -476,46 +431,55 @@ struct MenuBarView: View {
         return recordingManager.bufferDuration > 0 && !clipExporter.isExporting
     }
 
-    private func openPreviewWindow() async {
-        isPreparingPreview = true
-        defer { isPreparingPreview = false }
-
-        do {
-            guard let previewURL = try await clipExporter.preparePreview(duration: selectedDuration) else {
-                return
-            }
-
-            await MainActor.run {
-                PreviewWindow.show(videoURL: previewURL) { timeRange in
-                    Task {
-                        try await clipExporter.exportClipWithRange(timeRange, from: previewURL)
-                        // Clean up temp file after export
-                        try? FileManager.default.removeItem(at: previewURL)
-                    }
-                }
-            }
-        } catch {
-            // Error handling - ClipExporter will have set exportError
-        }
-    }
-
     // MARK: - Settings Section
 
     private var settingsSection: some View {
-        VStack(spacing: 0) {
-            Button("Preferences...") {
+        VStack(spacing: 2) {
+            MenuItemButton(title: "Preferences...", shortcut: "⌘,") {
                 onPreferences()
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
 
-            Button("Quit DevCam") {
+            MenuItemButton(title: "Quit DevCam", shortcut: "⌘Q") {
                 onQuit()
             }
-            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Menu Item Button
+
+/// A button styled like a native macOS menu item with hover state
+struct MenuItemButton: View {
+    let title: String
+    var shortcut: String? = nil
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.body)
+                Spacer()
+                if let shortcut = shortcut {
+                    Text(shortcut)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+            }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isHovered ? Color.accentColor.opacity(0.8) : Color.clear)
+            .foregroundColor(isHovered ? .white : .primary)
+            .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }
@@ -535,16 +499,12 @@ struct MenuBarView: View {
         bufferManager: bufferManager,
         settings: settings
     )
-    let windowCaptureManager = WindowCaptureManager(settings: settings)
 
     MenuBarView(
         recordingManager: recordingManager,
         clipExporter: clipExporter,
         settings: settings,
         bufferManager: bufferManager,
-        windowCaptureManager: windowCaptureManager,
-        settings: settings,
-        onSelectWindows: { },
         onPreferences: { },
         onQuit: { }
     )

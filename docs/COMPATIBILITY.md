@@ -1,16 +1,16 @@
 # DevCam Compatibility Guide
 
 ## Supported macOS
-- macOS 13.0+ (ScreenCaptureKit required; launch at login uses SMAppService)
+- macOS 13.0+ (ScreenCaptureKit and ServiceManagement)
 
 ## Hardware
 - Apple Silicon: supported
 - Intel Macs: supported (performance may vary)
 
 ## Displays
-- Records the primary display (largest resolution).
-- Multi-display is supported by ScreenCaptureKit, but DevCam does not yet allow
-  manual display selection.
+- Primary display recording (largest resolution) is supported.
+- Specific display selection is supported in Preferences and the menubar.
+- All-displays mode is not implemented and falls back to primary.
 - High-resolution displays (4K and above) increase CPU, GPU, and disk usage.
 
 ## Performance Expectations (Baseline)
@@ -26,8 +26,10 @@ Based on the current target profile (M1, 1080p, 60fps, 15-minute buffer):
 - Intel Macs with integrated graphics under heavy GPU load
 
 ## Known Behavior
-- Shortcuts are reliable when DevCam is active (Cmd-Option-5/6/7).
-- Save location and notifications apply immediately; recording quality changes apply after restart.
+- Shortcuts are system-wide but do not consume the keystroke.
+- Save location and notification settings apply immediately.
+- Recording quality and battery monitoring changes require restart.
+- Exported clips are currently video-only even if audio capture is enabled.
 
 ## Report Compatibility Issues
 Use `docs/FEEDBACK_TEMPLATE.md` and include your hardware and display details.

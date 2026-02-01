@@ -3,9 +3,9 @@
 Goal: Export the last N minutes of the rolling buffer to a single mp4.
 
 Entry points
-- DevCam/DevCam/UI/MenuBarView.swift: Save Clip button and Advanced window slider.
+- DevCam/DevCam/UI/MenuBarView.swift: Save Clip button and Advanced... window.
 - DevCam/DevCam/DevCamApp.swift: setupKeyboardShortcuts -> KeyboardShortcutHandler.
-- DevCam/DevCam/Utilities/KeyboardShortcutHandler.swift: Cmd+Option+5/6/7 triggers.
+- DevCam/DevCam/Utilities/KeyboardShortcutHandler.swift: Cmd-Option-5/6/7 triggers.
 
 Steps
 1. UI or shortcut calls ClipExporter.exportClip(duration:).
@@ -17,4 +17,5 @@ Steps
 
 Notes
 - ExportError.noSegmentsAvailable is thrown if the buffer is empty.
-- Save location and notifications come from AppSettings at ClipExporter initialization.
+- Save location and notification preferences are read at export time.
+- Notifications require system permission (requested on launch when enabled).

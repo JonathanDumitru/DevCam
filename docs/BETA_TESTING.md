@@ -5,7 +5,8 @@ Status: This guide reflects current beta functionality and limitations (v1.2).
 ## Goals
 - Validate continuous recording stability
 - Validate retroactive clip exports (1-15 minutes)
-- Validate preferences (save location, quality, notifications)
+- Validate display selection and display switching behavior
+- Validate adaptive quality and battery modes
 - Capture performance and energy observations
 - Identify permission and logging issues
 
@@ -13,7 +14,7 @@ Status: This guide reflects current beta functionality and limitations (v1.2).
 - macOS 13.0+
 - Screen Recording permission
 - 2 GB free disk space (more for higher quality)
-- Any display setup; DevCam records the primary display (largest resolution)
+- Any display setup (primary by default, specific display selection supported)
 
 ## Install / Update
 - Use the provided beta build.
@@ -29,30 +30,36 @@ Status: This guide reflects current beta functionality and limitations (v1.2).
 ## Features In This Beta
 - Menubar-only app with continuous recording and a rolling 15-minute buffer.
 - Save Clip slider (1-15 minutes in 1-minute steps).
-- Advanced clip window for custom start/end selection within the buffer.
-- Keyboard shortcuts for 5/10/15 minutes (DevCam must be active, Cmd+Option+5/6/7).
-- Preferences: save location, recording quality (Low/Medium/High), notifications, launch at login.
-- Clips browser with open, reveal, delete, and clear actions.
+- Advanced clip window for timeline trim or custom duration, with annotations.
+- System-wide keyboard shortcuts for 5/10/15 minutes (Cmd-Option-5/6/7).
+- Preferences: save location, recording quality (Low/Medium/High), launch at login, notifications.
+- Recording tab: display selection, audio capture toggle, adaptive quality, battery mode.
+- Clips browser with tag filtering, detail view, open/reveal/delete/clear actions.
+- Health tab with stats, disk usage, recent errors, and exportable report.
 - Privacy tab with permission status and a System Settings shortcut.
 
 ## Known Limitations
-- No audio recording.
+- Exported clips are video-only even if audio capture is enabled.
+- Microphone capture is not implemented.
+- All-displays mode is not implemented.
 - Buffer length fixed at 15 minutes.
-- Shortcuts are reliable when DevCam is active; global shortcuts are best-effort.
-- Recording quality changes apply after restart.
-- No display selection (records primary display only).
+- Shortcuts are not customizable.
+- Recording quality changes require restart.
+- Battery monitoring changes require restart.
 - No forward-recording mode or clips longer than 15 minutes.
 
 ## Known Issues
-- Brief energy spikes may occur when opening Preferences or revealing files.
+- See `docs/KNOWN_ISSUES.md` for the current list.
 
 ## What To Test
 - Launch and menubar visibility.
 - Recording starts automatically and buffer time increases.
 - Save Clip exports at multiple durations.
-- Advanced clip export with custom ranges.
-- Preferences behavior (save location/notifications apply immediately; quality requires restart).
-- Clips tab actions (open, reveal, delete, clear).
+- Advanced clip export with custom durations and annotations.
+- Display switching behavior (buffer cleared, recording restarts).
+- Preferences persistence and restart-required behavior.
+- Clips tab actions (open, reveal, delete, clear, tag filtering).
+- Health tab export report.
 - Permission flow when denied or granted.
 - Sleep/wake pause and resume behavior.
 - Performance on your hardware (CPU, memory, energy).

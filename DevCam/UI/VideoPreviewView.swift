@@ -75,7 +75,7 @@ struct VideoPreviewView: View {
     private var noPreviewView: some View {
         VStack(spacing: 8) {
             Image(systemName: "film.slash")
-                .font(.system(size: 32))
+                .font(.title)
                 .foregroundColor(.secondary)
             Text("No preview available")
                 .font(.caption)
@@ -89,7 +89,7 @@ struct VideoPreviewView: View {
     private func errorView(_ message: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 32))
+                .font(.title)
                 .foregroundColor(.orange)
             Text(message)
                 .font(.caption)
@@ -134,7 +134,7 @@ struct VideoPreviewView: View {
             HStack {
                 // Current time
                 Text(formatTime(currentTime))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.caption.monospaced())
                     .foregroundColor(.secondary)
 
                 Spacer()
@@ -142,23 +142,25 @@ struct VideoPreviewView: View {
                 // Play/Pause button
                 Button(action: togglePlayPause) {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16))
+                        .font(.body)
                 }
                 .buttonStyle(.borderless)
                 .keyboardShortcut(.space, modifiers: [])
+                .help(isPlaying ? "Pause" : "Play")
 
                 // Restart button
                 Button(action: restart) {
                     Image(systemName: "backward.end.fill")
-                        .font(.system(size: 12))
+                        .font(.callout)
                 }
                 .buttonStyle(.borderless)
+                .help("Restart")
 
                 Spacer()
 
                 // Duration
                 Text(formatTime(duration))
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.caption.monospaced())
                     .foregroundColor(.secondary)
             }
         }

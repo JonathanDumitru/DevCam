@@ -116,6 +116,7 @@ struct AdvancedClipWindow: View {
             Button("Cancel") {
                 dismiss()
             }
+            .buttonStyle(.bordered)
         }
         .padding(.horizontal)
         .padding(.top)
@@ -151,6 +152,7 @@ struct AdvancedClipWindow: View {
                         customSeconds = "00"
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.small)
                     .disabled(Double(minutes * 60) > maxDuration)
                 }
             }
@@ -173,7 +175,7 @@ struct AdvancedClipWindow: View {
                     }
 
                 Text(":")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.body.weight(.medium))
 
                 TextField("", text: $customSeconds)
                     .frame(width: 40)
@@ -277,11 +279,11 @@ struct AdvancedClipWindow: View {
                         Spacer()
                         HStack {
                             Text("Now")
-                                .font(.system(size: 10))
+                                .font(.caption2)
                                 .foregroundColor(.secondary)
                             Spacer()
                             Text("-15:00")
-                                .font(.system(size: 10))
+                                .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
                         .padding(.horizontal, 4)
@@ -296,20 +298,20 @@ struct AdvancedClipWindow: View {
             HStack(spacing: 16) {
                 Label("Start", systemImage: "circle.fill")
                     .foregroundColor(.green)
-                    .font(.system(size: 11))
+                    .font(.caption)
 
                 Label("End", systemImage: "circle.fill")
                     .foregroundColor(.red)
-                    .font(.system(size: 11))
+                    .font(.caption)
 
                 Label("Selected", systemImage: "rectangle.fill")
                     .foregroundColor(.blue)
-                    .font(.system(size: 11))
+                    .font(.caption)
 
                 Spacer()
 
                 Text("Drag sliders below to adjust")
-                    .font(.system(size: 10))
+                    .font(.caption2)
                     .foregroundColor(.secondary)
             }
         }
@@ -327,7 +329,7 @@ struct AdvancedClipWindow: View {
                         .fontWeight(.medium)
                     Spacer()
                     Text(formatTimeAgo(startOffset))
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.callout.monospaced())
                         .foregroundColor(.green)
                 }
 
@@ -349,7 +351,7 @@ struct AdvancedClipWindow: View {
                         .fontWeight(.medium)
                     Spacer()
                     Text(formatTimeAgo(endOffset))
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(.callout.monospaced())
                         .foregroundColor(.red)
                 }
 
@@ -384,7 +386,7 @@ struct AdvancedClipWindow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(formatDuration(min(clipDuration, maxDuration)))
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
+                        .font(.body.weight(.medium).monospaced())
                 }
 
                 Spacer()
@@ -394,7 +396,7 @@ struct AdvancedClipWindow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(estimatedFileSize)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.body.weight(.medium))
                 }
 
                 Spacer()
@@ -404,7 +406,7 @@ struct AdvancedClipWindow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(formatDuration(maxDuration))
-                        .font(.system(size: 16, design: .monospaced))
+                        .font(.body.monospaced())
                 }
             }
             .padding()
@@ -452,7 +454,7 @@ struct AdvancedClipWindow: View {
                             Spacer()
                             VStack(spacing: 8) {
                                 Image(systemName: "film.slash")
-                                    .font(.system(size: 24))
+                                    .font(.title2)
                                     .foregroundColor(.secondary)
                                 Text("No recording available to preview")
                                     .font(.caption)
@@ -519,7 +521,7 @@ struct AdvancedClipWindow: View {
                             .foregroundColor(.secondary)
                         TextEditor(text: $clipNotes)
                             .frame(height: 60)
-                            .font(.system(size: 12))
+                            .font(.callout)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 4)
                                     .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
@@ -549,6 +551,7 @@ struct AdvancedClipWindow: View {
             Button("Cancel") {
                 dismiss()
             }
+            .buttonStyle(.bordered)
             .keyboardShortcut(.cancelAction)
 
             Spacer()
