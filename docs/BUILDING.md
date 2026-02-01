@@ -117,9 +117,9 @@ DevCam requires these entitlements (DevCam.entitlements):
 <true/>
 ```
 
-DevCam does not enable the App Sandbox.
+DevCam enables the App Sandbox.
 
-Note: network entitlements apply only to sandboxed apps; DevCam does not include network features.
+Note: DevCam does not include network entitlements or network features.
 
 ## Running Tests
 
@@ -133,13 +133,13 @@ xcodebuild test -scheme DevCam -destination 'platform=macOS'
 ```
 
 ### Manual Testing (Recommended)
-Status: Shortcuts are app-local; recording quality selection is implemented. Global shortcuts and buffer/display settings are not.
+Status: Shortcuts are system-wide; recording quality selection, display selection, and launch at login are implemented. Audio export and all-displays capture are not.
 Before release:
 1. Cold start: grant permissions, choose location
 2. Recording: confirm recording starts automatically
 3. Buffer rotation: record 20+ minutes
 4. Clip export: save 1-15 minute clips via the menubar slider
-5. Shortcuts: verify they work when DevCam is active
+5. Shortcuts: verify Cmd-Option-5/6/7 work system-wide
 6. Preferences: change settings and verify persistence on next launch
 7. Low disk space: test < 2 GB available
 8. Display changes: connect and disconnect monitors

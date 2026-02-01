@@ -261,6 +261,8 @@ struct HealthTab: View {
             Button(action: exportReport) {
                 Label("Export Health Report", systemImage: "square.and.arrow.up")
             }
+            .buttonStyle(.bordered)
+            .help("Export diagnostic information for troubleshooting")
         }
         .padding(.top, 8)
     }
@@ -365,6 +367,7 @@ struct ExportReportSheet: View {
                 Button("Done") {
                     onDismiss()
                 }
+                .buttonStyle(.borderedProminent)
             }
 
             ScrollView {
@@ -381,10 +384,12 @@ struct ExportReportSheet: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(report, forType: .string)
                 }
+                .buttonStyle(.bordered)
 
                 Button("Save to File...") {
                     saveReportToFile()
                 }
+                .buttonStyle(.bordered)
             }
         }
         .padding()

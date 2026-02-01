@@ -31,6 +31,7 @@ struct ClipsTab: View {
                         clipExporter.clearRecentClips()
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
             .padding()
@@ -92,7 +93,7 @@ struct ClipsTab: View {
                 Image(systemName: "tag")
                 Text(filterTag ?? "Filter")
             }
-            .font(.system(size: 12))
+            .font(.callout)
         }
         .menuStyle(.borderlessButton)
     }
@@ -102,7 +103,7 @@ struct ClipsTab: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "film.stack")
-                .font(.system(size: 48))
+                .font(.largeTitle)
                 .foregroundColor(.secondary)
 
             Text("No clips saved yet")
@@ -110,7 +111,7 @@ struct ClipsTab: View {
                 .foregroundColor(.secondary)
 
             Text("Use keyboard shortcuts or the menubar to save clips")
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -120,7 +121,7 @@ struct ClipsTab: View {
     private var noFilterResultsState: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
+                .font(.largeTitle)
                 .foregroundColor(.secondary)
 
             Text("No clips with tag \"\(filterTag ?? "")\"")
@@ -131,6 +132,7 @@ struct ClipsTab: View {
                 filterTag = nil
             }
             .buttonStyle(.bordered)
+            .controlSize(.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -154,7 +156,7 @@ struct ClipsTab: View {
                 // Thumbnail placeholder with annotation indicator
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: "film.fill")
-                        .font(.system(size: 24))
+                        .font(.title2)
                         .foregroundColor(.blue)
                         .frame(width: 44, height: 44)
                         .background(Color.blue.opacity(0.1))
@@ -173,20 +175,20 @@ struct ClipsTab: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Title or filename
                     Text(clip.displayTitle)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.body.weight(.medium))
                         .lineLimit(1)
 
                     HStack(spacing: 12) {
                         Label(clip.durationFormatted, systemImage: "clock")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
 
                         Label(clip.fileSizeFormatted, systemImage: "doc")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
 
                         Text(clip.timestamp.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -249,7 +251,7 @@ struct ClipsTab: View {
             // Notes preview (if any)
             if let notes = clip.notes, !notes.isEmpty {
                 Text(notes)
-                    .font(.system(size: 11))
+                    .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
                     .padding(.top, 2)
@@ -275,9 +277,9 @@ struct TagBadge: View {
         Button(action: onTap) {
             HStack(spacing: 2) {
                 Image(systemName: "tag.fill")
-                    .font(.system(size: 8))
+                    .font(.caption2)
                 Text(tag)
-                    .font(.system(size: 10))
+                    .font(.caption2)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -326,7 +328,7 @@ struct ClipDetailView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 Text(clip.fileURL.lastPathComponent)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.body.monospaced())
             }
 
             // Duration & Size
@@ -336,7 +338,7 @@ struct ClipDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(clip.durationFormatted)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.body.weight(.medium))
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -344,7 +346,7 @@ struct ClipDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(clip.fileSizeFormatted)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.body.weight(.medium))
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -352,7 +354,7 @@ struct ClipDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(clip.timestamp.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 14))
+                        .font(.body)
                 }
             }
 
@@ -377,7 +379,7 @@ struct ClipDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Text(notes)
-                        .font(.system(size: 13))
+                        .font(.body)
                         .padding(8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color(nsColor: .controlBackgroundColor))
@@ -392,6 +394,7 @@ struct ClipDetailView: View {
                 Button("Show in Finder") {
                     NSWorkspace.shared.selectFile(clip.fileURL.path, inFileViewerRootedAtPath: "")
                 }
+                .buttonStyle(.bordered)
 
                 Spacer()
 

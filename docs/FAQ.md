@@ -11,7 +11,7 @@ remain until you delete them.
 
 ## Can I save clips other than 5, 10, or 15 minutes?
 Yes. The menubar Save Clip slider supports 1-15 minute exports in 1-minute steps.
-The Advanced option lets you set a custom start/end range within the buffer.
+The Advanced option lets you trim a timeline range or set a custom duration.
 
 ## Can I change the buffer length?
 Not yet. The buffer is fixed at 15 minutes in current builds.
@@ -27,16 +27,19 @@ Yes. Preferences → General lets you choose Low (720p), Medium (1080p), or High
 System Settings > Privacy and Security > Screen Recording.
 
 ## Does DevCam record audio?
-No. Current builds capture screen video only.
+System audio capture can be enabled, but exported clips are currently video-only.
+Microphone capture is not implemented yet.
 
 ## Can I record a specific display?
-Not yet. DevCam records the primary display (largest resolution) in current builds.
+Yes. You can select a specific display in Preferences or the menubar display menu.
+Switching displays clears the buffer and restarts capture.
 
 ## Why is export slower on older Macs?
 Encoding and disk speed are the main factors. Older GPUs may take longer.
 
 ## Can I pause recording?
-Not currently. Recording only pauses on system sleep and resumes on wake.
+Not manually. Recording pauses on system sleep and can pause on low battery if
+you enable that mode in Preferences.
 
 ## Can I record longer than 15 minutes?
 Not yet. Current builds only support saving the last 5, 10, or 15 minutes.

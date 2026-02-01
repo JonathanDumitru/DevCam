@@ -1,9 +1,9 @@
 # ScreenCaptureKit Integration Guide
 
 This document explains how DevCam integrates with ScreenCaptureKit for high
-performance screen recording on macOS 12.3+.
+performance screen recording on macOS 13.0+.
 
-Status: RecordingManager, VideoStreamOutput, and ClipExporter are implemented. Menubar and Preferences UI are wired; recording quality scaling is active and other settings remain stubs.
+Status: RecordingManager, VideoStreamOutput, and ClipExporter are implemented. Menubar and Preferences UI are wired; recording quality scaling, display selection, and system audio capture are in place. All-displays and microphone capture remain unimplemented.
 
 ## Why ScreenCaptureKit
 
@@ -55,7 +55,7 @@ let windows = content.windows
 let apps = content.applications
 ```
 
-DevCam selects the display with the largest resolution by default.
+DevCam selects the largest display by default, or a specific display when configured in Preferences.
 
 ## Configure the Stream
 
@@ -114,6 +114,14 @@ try stream.addStreamOutput(
     sampleHandlerQueue: .main
 )
 
+if settings.audioCaptureMode.capturesSystemAudio {
+    try stream.addStreamOutput(
+        self,
+        type: .audio,
+        sampleHandlerQueue: .main
+    )
+}
+
 try await stream.startCapture()
 ```
 
@@ -137,9 +145,15 @@ class VideoStreamOutput: NSObject, SCStreamOutput {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of type: SCStreamOutputType
     ) {
-        guard type == .screen else { return }
         Task { @MainActor in
-            await recordingManager?.processSampleBuffer(sampleBuffer)
+            switch type {
+            case .screen:
+                await recordingManager?.processSampleBuffer(sampleBuffer)
+            case .audio:
+                await recordingManager?.processAudioSampleBuffer(sampleBuffer)
+            @unknown default:
+                break
+            }
         }
     }
 }

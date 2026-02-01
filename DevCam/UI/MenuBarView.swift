@@ -83,7 +83,7 @@ struct MenuBarView: View {
             HStack {
                 statusIndicator
                 Text(statusText)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.headline)
                 Spacer()
             }
 
@@ -91,10 +91,10 @@ struct MenuBarView: View {
             if recordingManager.isInRecoveryMode {
                 HStack {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundColor(.orange)
                     Text("Auto-recovery in progress...")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.orange)
                     Spacer()
                 }
@@ -103,10 +103,10 @@ struct MenuBarView: View {
             if recordingManager.isQualityDegraded {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundColor(.yellow)
                     Text("Quality reduced due to system constraints")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
                 }
@@ -116,7 +116,7 @@ struct MenuBarView: View {
             if recordingManager.isRecording {
                 HStack {
                     Text(bufferStatusText)
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
 
@@ -130,7 +130,7 @@ struct MenuBarView: View {
                 VStack(spacing: 4) {
                     HStack {
                         Text("Exporting...")
-                            .font(.system(size: 11))
+                            .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                     }
@@ -143,7 +143,7 @@ struct MenuBarView: View {
             if let error = recordingManager.recordingError {
                 HStack {
                     Text(errorDescription(error))
-                        .font(.system(size: 10))
+                        .font(.caption2)
                         .foregroundColor(.orange)
                         .lineLimit(2)
                     Spacer()
@@ -180,16 +180,16 @@ struct MenuBarView: View {
             } label: {
                 HStack {
                     Image(systemName: "display")
-                        .font(.system(size: 11))
+                        .font(.caption)
                     Text(currentDisplayLabel)
-                        .font(.system(size: 12))
+                        .font(.body)
                     Spacer()
                     if isSwitchingDisplay {
                         ProgressView()
                             .scaleEffect(0.6)
                     } else {
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 10))
+                            .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -354,7 +354,7 @@ struct MenuBarView: View {
             // Title
             HStack {
                 Text("Save Clip")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.headline)
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -367,11 +367,11 @@ struct MenuBarView: View {
 
                 HStack {
                     Text(formatDuration(selectedDuration))
-                        .font(.system(size: 12))
+                        .font(.callout)
                         .foregroundColor(.secondary)
                     Spacer()
                     Text("Max: \(formatDuration(min(recordingManager.bufferDuration, 900)))")
-                        .font(.system(size: 11))
+                        .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 12)
@@ -401,10 +401,10 @@ struct MenuBarView: View {
             }) {
                 HStack {
                     Text("Advanced...")
-                        .font(.system(size: 12))
+                        .font(.callout)
                     Spacer()
                     Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 10))
+                        .font(.caption2)
                 }
                 .contentShape(Rectangle())
             }
@@ -434,20 +434,52 @@ struct MenuBarView: View {
     // MARK: - Settings Section
 
     private var settingsSection: some View {
-        VStack(spacing: 0) {
-            Button("Preferences...") {
+        VStack(spacing: 2) {
+            MenuItemButton(title: "Preferences...", shortcut: "⌘,") {
                 onPreferences()
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
 
-            Button("Quit DevCam") {
+            MenuItemButton(title: "Quit DevCam", shortcut: "⌘Q") {
                 onQuit()
             }
-            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Menu Item Button
+
+/// A button styled like a native macOS menu item with hover state
+struct MenuItemButton: View {
+    let title: String
+    var shortcut: String? = nil
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.body)
+                Spacer()
+                if let shortcut = shortcut {
+                    Text(shortcut)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+            }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isHovered ? Color.accentColor.opacity(0.8) : Color.clear)
+            .foregroundColor(isHovered ? .white : .primary)
+            .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }

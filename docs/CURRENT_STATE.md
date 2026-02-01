@@ -1,9 +1,12 @@
-# Current State Snapshot (Updated 2026-01-26, v1.2.2)
+# Current State Snapshot (Updated 2026-01-31, v1.2.2)
 
 ## Summary
 - Continuous recording is stable with a 15-minute rolling buffer and retroactive export.
 - Menubar save workflow supports 1-15 minute exports (1-minute steps) plus advanced custom ranges.
 - Recording quality selection is implemented (Low/Medium/High); changes apply after restart.
+- Display selection is implemented with safe switching (buffer clears on switch).
+- Adaptive quality and battery-aware recording modes are implemented (apply after restart).
+- Health dashboard shows session/lifetime stats, disk usage, and recent errors.
 - Launch at Login fully functional using ServiceManagement framework (macOS 13.0+).
 - Keyboard shortcuts (⌘⌥5/6/7) available for quick clip saving.
 - Save location and notifications apply immediately without restart.
@@ -13,7 +16,7 @@
 - Recording starts automatically and maintains a rolling 15-minute buffer.
 - Save actions are enabled once buffer time accumulates.
 - Menubar reports recording state, buffer duration, and export progress.
-- Keyboard shortcuts (⌘⌥5/6/7) save 5/10/15 minute clips when DevCam popover is open.
+- Keyboard shortcuts (⌘⌥5/6/7) save 5/10/15 minute clips via the global shortcut handler.
 
 ## Evidence
 - Recent test notes provided via console logs and Activity Monitor during the 15-minute run.

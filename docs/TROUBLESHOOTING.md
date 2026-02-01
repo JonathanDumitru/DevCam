@@ -44,7 +44,7 @@ Status: This guide reflects current beta behavior; some sections note limitation
 ## High CPU usage
 - Close GPU-heavy applications.
 - Reduce display resolution if possible.
-- Pause recording if you are not actively using DevCam.
+- Switch to a lower recording quality in Preferences and restart DevCam.
 
 ## Multi-display issues
 - Disconnect and reconnect external displays.
@@ -57,12 +57,14 @@ Status: This guide reflects current beta behavior; some sections note limitation
 - Check logs for errors and include them in support requests.
 
 ## Shortcuts do not work
-- Shortcuts are app-local; click the menubar icon to focus DevCam.
-- macOS may reserve Command-Shift-5/6/7 for screenshots when DevCam is inactive.
+- Shortcuts are system-wide: Command-Option-5/6/7.
+- Global monitors do not consume events, so the active app still receives the keystroke.
+- If a shortcut conflicts with another app, use the menubar Save Clip slider instead.
 
 ## Quality or save location changes do not apply
-- Recording quality, save location, and notification settings apply after restart.
-- Quit and relaunch DevCam after changing these settings.
+- Recording quality changes require restart.
+- Save location and notifications apply immediately for new exports.
+- Battery mode changes require restart.
 
 ## Recording shows Paused, clips disabled, or Preferences hangs
 - Confirm Screen Recording permission is granted in System Settings.
@@ -71,8 +73,8 @@ Status: This guide reflects current beta behavior; some sections note limitation
 - Include hardware model, macOS version, and display setup in the report.
 
 ## Console log spam: "Sample buffer has no image buffer"
-- This message can appear repeatedly during capture.
-- Capture a short log snippet (10-30 seconds) and include it with your report.
+- This was rate-limited in builds after 2026-01-26.
+- If you still see rapid repeats, capture a short log snippet (10-30 seconds) and include it with your report.
 - Note whether Picture-in-Picture or other overlays were active.
 
 ## Energy impact spikes during Preferences or file actions

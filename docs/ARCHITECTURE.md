@@ -3,7 +3,7 @@
 This document provides an in-depth look at DevCam's architecture, component
 interactions, and design decisions.
 
-Status: RecordingManager, BufferManager, ClipExporter, AppSettings, and the menubar/preferences UI are implemented. Recording quality selection is wired; global shortcuts and login item setup are not.
+Status: RecordingManager, BufferManager, ClipExporter, AppSettings, and the menubar/preferences UI are implemented. Recording quality selection, global shortcuts, launch at login, display selection, adaptive quality, and battery monitoring are wired. All-displays capture and microphone recording remain unimplemented.
 
 ## System Overview
 
@@ -11,7 +11,7 @@ DevCam is a native macOS menubar application built with Swift, SwiftUI, and
 ScreenCaptureKit. The architecture follows an MVVM-style separation between UI,
 recording, buffering, and export workflows.
 
-Note: Diagrams reflect current wiring; some UI settings are stubs (for example, launch at login and shortcut customization).
+Note: Diagrams reflect current wiring; some UI settings are stubs (for example, all-displays capture, microphone capture, and shortcut customization).
 
 ```
 +-------------------------------------------------------------+
@@ -411,11 +411,12 @@ Memory:
 
 Permissions:
 - Screen recording permission required (enforced by macOS)
-- App Sandbox not enabled; app runs with standard user permissions
+- App Sandbox enabled with screen capture and user-selected read/write entitlements
 
 File access:
 - Buffer directory managed by the app
-- Clip export is designed to use a user-selected folder (not OS-enforced)
+- Clip export uses a user-selected folder chosen via NSOpenPanel
+- Save location is persisted as a path (no security-scoped bookmark handling yet)
 
 Network:
 - No network features by design
@@ -424,16 +425,16 @@ Network:
 ## Extensibility
 
 Audio recording:
-- Add AVAssetWriterInput for audio
-- Capture system audio via ScreenCaptureKit
+- System audio capture via ScreenCaptureKit is implemented
+- Microphone capture and audio export stitching are not implemented
 
 Multi-display:
-- Expose display selection in Preferences
-- Create separate streams per display if needed
+- Display selection in Preferences is implemented
+- All-displays capture and multi-stream compositing are not implemented
 
 Clip trimming:
-- Add a trim UI in the export flow
-- Use AVMutableComposition for time slicing
+- Advanced clip window supports timeline trim and custom duration
+- Preview and audio-inclusive trimming remain future work
 
 ## Conclusion
 

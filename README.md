@@ -22,10 +22,12 @@ Ever wish you could hit "save" *after* something interesting happened on your sc
 
 - ✅ **Continuous 60fps screen recording** with automatic buffer management
 - ✅ **Rolling 15-minute buffer** that self-manages disk space and memory
-- ✅ **Retroactive save** for 1-15 minutes via menubar; shortcuts for 5/10/15 when active
+- ✅ **Retroactive save** for 1-15 minutes via menubar; system-wide shortcuts for 5/10/15 minutes
 - ✅ **Native macOS menubar app** built with Swift and SwiftUI
-- ✅ **Preferences window** with clips browser and settings management
+- ✅ **Preferences window** with recording, clips, health, and privacy tabs
 - ✅ **Recording quality selection** (Low/Medium/High)
+- ✅ **Display selection** with safe switching (buffer cleared on switch)
+- ✅ **Adaptive quality + battery-aware recording** modes
 - ✅ **System integration** handles sleep/wake events
 - ✅ **Real-time export progress** with notifications on completion
 - ✅ **100% local and private** - no network connections, no telemetry, no cloud
@@ -107,8 +109,10 @@ DevCam handles macOS system events:
 
 Open Preferences from the menubar menu:
 
-- **General Tab:** Configure save location, recording quality, launch at login (preference only), notification preferences
+- **General Tab:** Configure save location, recording quality, launch at login, notification preferences
+- **Recording Tab:** Display selection, audio capture toggle, adaptive quality, battery mode
 - **Clips Tab:** Browse, preview, and manage saved clips
+- **Health Tab:** Session/lifetime stats and error history
 - **Privacy Tab:** Screen recording permission status and privacy details
 
 See [Settings Reference](docs/SETTINGS.md) for complete configuration options.
@@ -133,7 +137,7 @@ See [Architecture Guide](docs/ARCHITECTURE.md) for deep technical details.
 - **Frame Rate:** 60fps for smooth playback of fast screen changes
 - **Bitrate:** ~16 Mbps for 1080p (calculated as `width × height × 0.15 × fps`)
 - **Container:** MPEG-4 (`.mp4`) format
-- **Audio:** No audio capture (screen recording only)
+- **Audio:** System audio capture toggle available; exported clips are currently video-only
 
 ### Performance
 
@@ -150,7 +154,7 @@ Performance scales with screen resolution. See [Architecture Guide](docs/ARCHITE
 
 DevCam has **zero external dependencies**. It uses only Apple-provided frameworks:
 
-- **ScreenCaptureKit** - Screen capture and recording (macOS 12.3+)
+- **ScreenCaptureKit** - Screen capture and recording (macOS 12.3+; app targets 13.0+)
 - **AVFoundation** - Video encoding and export
 - **SwiftUI** - User interface
 - **AppKit** - Menubar integration and system events
@@ -216,7 +220,7 @@ See [Privacy Policy](docs/PRIVACY.md) for complete details on data handling and 
 
 ### Runtime Requirements
 
-- **macOS 12.3 or later** (Monterey, Ventura, Sonoma, Sequoia)
+- **macOS 13.0 or later** (Ventura, Sonoma, Sequoia)
 - **Screen Recording permission** granted via System Settings
 - **2+ GB free disk space** for buffer and saved clips
 - **Recommended:** 8+ GB RAM for smooth operation alongside other apps
@@ -225,7 +229,7 @@ See [Privacy Policy](docs/PRIVACY.md) for complete details on data handling and 
 
 - **Xcode 14.0 or later** (Xcode 15+ recommended)
 - **Swift 5.9 or later** (included with Xcode)
-- **macOS 12.3+ SDK** (included with Xcode)
+- **macOS 13.0+ SDK** (included with Xcode)
 - **Apple Developer account** (for code signing, optional for local builds)
 
 ## Building from Source

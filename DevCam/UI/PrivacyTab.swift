@@ -22,10 +22,10 @@ struct PrivacyTab: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(permissionStatusText)
-                                .font(.system(size: 13))
+                                .font(.body)
 
                             Text(permissionStatusDescription)
-                                .font(.system(size: 11))
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                         }
 
@@ -47,14 +47,14 @@ struct PrivacyTab: View {
                         .font(.headline)
 
                     Text("DevCam stores all recordings locally on your Mac. No data is sent to the internet.")
-                        .font(.system(size: 12))
+                        .font(.callout)
                         .foregroundColor(.secondary)
 
                     Divider()
                         .padding(.vertical, 4)
 
                     Text("What We Store:")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.callout.weight(.medium))
 
                     VStack(alignment: .leading, spacing: 4) {
                         privacyBullet("Screen recordings in a 15-minute rolling buffer")
@@ -66,7 +66,7 @@ struct PrivacyTab: View {
                         .padding(.vertical, 4)
 
                     Text("What We Don't Store:")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.callout.weight(.medium))
 
                     VStack(alignment: .leading, spacing: 4) {
                         privacyBullet("No cloud storage or backups")
@@ -79,7 +79,7 @@ struct PrivacyTab: View {
                         .padding(.vertical, 4)
 
                     Text("Storage Locations:")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.callout.weight(.medium))
 
                     VStack(alignment: .leading, spacing: 4) {
                         storageLocation(
@@ -102,7 +102,7 @@ struct PrivacyTab: View {
 
     private var permissionStatusIndicator: some View {
         Image(systemName: permissionStatusIcon)
-            .font(.system(size: 24))
+            .font(.title2)
             .foregroundColor(permissionStatusColor)
     }
 
@@ -131,11 +131,11 @@ struct PrivacyTab: View {
     private func privacyBullet(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("•")
-                .font(.system(size: 11))
+                .font(.caption)
                 .foregroundColor(.secondary)
 
             Text(text)
-                .font(.system(size: 11))
+                .font(.caption)
                 .foregroundColor(.secondary)
         }
     }
@@ -143,12 +143,12 @@ struct PrivacyTab: View {
     private func storageLocation(label: String, path: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text("\(label):")
-                .font(.system(size: 11, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundColor(.secondary)
                 .frame(width: 60, alignment: .leading)
 
             Text(path)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.caption.monospaced())
                 .foregroundColor(.secondary)
                 .textSelection(.enabled)
         }
