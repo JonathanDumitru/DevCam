@@ -67,6 +67,14 @@ struct HealthTab: View {
                     color: recordingManager.isRecording ? .green : .gray
                 )
 
+                if recordingManager.isRecording {
+                    StatusBadge(
+                        title: "Frame Rate",
+                        value: "\(recordingManager.currentFrameRate) fps",
+                        color: .blue
+                    )
+                }
+
                 if recordingManager.isInRecoveryMode {
                     StatusBadge(
                         title: "Recovery",

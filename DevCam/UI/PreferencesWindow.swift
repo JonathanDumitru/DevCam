@@ -13,6 +13,7 @@ struct PreferencesWindow: View {
     @ObservedObject var clipExporter: ClipExporter
     @ObservedObject var healthStats: HealthStats
     @ObservedObject var recordingManager: RecordingManager
+    @ObservedObject var shortcutManager: ShortcutManager
 
     var body: some View {
         TabView {
@@ -24,6 +25,11 @@ struct PreferencesWindow: View {
             RecordingTab(settings: settings, recordingManager: recordingManager)
                 .tabItem {
                     Label("Recording", systemImage: "record.circle")
+                }
+
+            ShortcutsTab(settings: settings, shortcutManager: shortcutManager)
+                .tabItem {
+                    Label("Shortcuts", systemImage: "keyboard")
                 }
 
             ClipsTab(clipExporter: clipExporter)
@@ -61,12 +67,14 @@ struct PreferencesWindow: View {
         permissionManager: permissionManager,
         settings: settings
     )
+    let shortcutManager = ShortcutManager(settings: settings)
 
     return PreferencesWindow(
         settings: settings,
         permissionManager: permissionManager,
         clipExporter: clipExporter,
         healthStats: healthStats,
-        recordingManager: recordingManager
+        recordingManager: recordingManager,
+        shortcutManager: shortcutManager
     )
 }

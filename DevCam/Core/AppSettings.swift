@@ -9,6 +9,8 @@ import Foundation
 import SwiftUI
 import Combine
 import OSLog
+import AVFoundation
+import AppKit
 
 /// Recording quality levels that determine resolution scaling and performance impact.
 ///
@@ -162,6 +164,115 @@ enum BatteryMode: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// Available frame rates for recording
+enum FrameRate: Int, CaseIterable, Identifiable, Codable {
+    case fps10 = 10
+    case fps15 = 15
+    case fps30 = 30
+    case fps60 = 60
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        "\(rawValue) fps"
+    }
+
+    var frameInterval: CMTime {
+        CMTime(value: 1, timescale: CMTimeScale(rawValue))
+    }
+}
+
+/// Available shortcut actions
+enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
+    case exportLast30Seconds = "export30s"
+    case exportLast1Minute = "export1m"
+    case exportLast5Minutes = "export5m"
+    case togglePauseResume = "togglePause"
+    case selectWindows = "selectWindows"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .exportLast30Seconds: return "Export Last 30 Seconds"
+        case .exportLast1Minute: return "Export Last 1 Minute"
+        case .exportLast5Minutes: return "Export Last 5 Minutes"
+        case .togglePauseResume: return "Pause/Resume Recording"
+        case .selectWindows: return "Select Windows"
+        }
+    }
+
+    var defaultKeyCode: UInt16 {
+        switch self {
+        case .exportLast30Seconds: return 1  // S key
+        case .exportLast1Minute: return 46   // M key
+        case .exportLast5Minutes: return 37  // L key
+        case .togglePauseResume: return 35   // P key
+        case .selectWindows: return 13  // W key
+        }
+    }
+
+    var defaultModifiers: NSEvent.ModifierFlags {
+        [.command, .shift]
+    }
+
+    var exportDuration: TimeInterval? {
+        switch self {
+        case .exportLast30Seconds: return 30
+        case .exportLast1Minute: return 60
+        case .exportLast5Minutes: return 300
+        case .togglePauseResume: return nil
+        case .selectWindows: return nil
+        }
+    }
+}
+
+/// Configuration for a single keyboard shortcut
+struct ShortcutConfig: Codable, Equatable {
+    let action: ShortcutAction
+    var keyCode: UInt16
+    var modifiers: UInt  // Store as UInt for Codable compatibility
+    var isEnabled: Bool
+
+    var modifierFlags: NSEvent.ModifierFlags {
+        get { NSEvent.ModifierFlags(rawValue: modifiers) }
+        set { modifiers = newValue.rawValue }
+    }
+
+    var displayString: String {
+        var parts: [String] = []
+        let flags = modifierFlags
+        if flags.contains(.control) { parts.append("⌃") }
+        if flags.contains(.option) { parts.append("⌥") }
+        if flags.contains(.shift) { parts.append("⇧") }
+        if flags.contains(.command) { parts.append("⌘") }
+        parts.append(keyCodeToString(keyCode))
+        return parts.joined()
+    }
+
+    private func keyCodeToString(_ keyCode: UInt16) -> String {
+        let keyMap: [UInt16: String] = [
+            0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
+            8: "C", 9: "V", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",
+            16: "Y", 17: "T", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6",
+            23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
+            30: "]", 31: "O", 32: "U", 33: "[", 34: "I", 35: "P", 37: "L",
+            38: "J", 39: "'", 40: "K", 41: ";", 42: "\\", 43: ",", 44: "/",
+            45: "N", 46: "M", 47: ".", 49: "Space", 50: "`"
+        ]
+        return keyMap[keyCode] ?? "?"
+    }
+
+    static func defaultConfig(for action: ShortcutAction) -> ShortcutConfig {
+        ShortcutConfig(
+            action: action,
+            keyCode: action.defaultKeyCode,
+            modifiers: action.defaultModifiers.rawValue,
+            isEnabled: true
+        )
+    }
+}
+
 /// Manages user preferences and application settings with automatic persistence.
 ///
 /// Uses @AppStorage property wrappers for automatic UserDefaults synchronization.
@@ -187,13 +298,11 @@ class AppSettings: ObservableObject {
     @AppStorage("displaySelectionMode") var displaySelectionMode: DisplaySelectionMode = .primary
     @AppStorage("selectedDisplayID") private var _selectedDisplayID: Int = 0
 
-    /// The display ID to record from when in .specific mode
+    /// The selected display ID for specific display mode.
+    /// Stored as Int internally for @AppStorage compatibility.
     var selectedDisplayID: UInt32 {
         get { UInt32(_selectedDisplayID) }
-        set {
-            _selectedDisplayID = Int(newValue)
-            objectWillChange.send()
-        }
+        set { _selectedDisplayID = Int(newValue) }
     }
 
     // MARK: - Audio Settings (Phase 4)
@@ -210,6 +319,84 @@ class AppSettings: ObservableObject {
     @AppStorage("adaptiveQualityEnabled") var adaptiveQualityEnabled: Bool = false
     @AppStorage("cpuThresholdHigh") var cpuThresholdHigh: Int = 80 // Reduce quality above this %
     @AppStorage("cpuThresholdLow") var cpuThresholdLow: Int = 50 // Restore quality below this %
+
+    // MARK: - Frame Rate Settings
+
+    @AppStorage("targetFrameRate") var targetFrameRate: FrameRate = .fps30
+    @AppStorage("adaptiveFrameRateEnabled") var adaptiveFrameRateEnabled: Bool = false
+    @AppStorage("idleThreshold") var idleThreshold: Double = 5.0 // seconds
+    @AppStorage("idleFrameRate") var idleFrameRate: FrameRate = .fps10
+
+    // MARK: - Keyboard Shortcut Settings
+
+    @AppStorage("shortcutConfigsData") private var shortcutConfigsData: Data = Data()
+
+    var shortcutConfigs: [ShortcutConfig] {
+        get {
+            guard !shortcutConfigsData.isEmpty,
+                  let configs = try? JSONDecoder().decode([ShortcutConfig].self, from: shortcutConfigsData) else {
+                return ShortcutAction.allCases.map { ShortcutConfig.defaultConfig(for: $0) }
+            }
+            return configs
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                shortcutConfigsData = data
+                objectWillChange.send()
+            }
+        }
+    }
+
+    func shortcutConfig(for action: ShortcutAction) -> ShortcutConfig {
+        shortcutConfigs.first { $0.action == action } ?? ShortcutConfig.defaultConfig(for: action)
+    }
+
+    func updateShortcut(_ config: ShortcutConfig) {
+        var configs = shortcutConfigs
+        if let index = configs.firstIndex(where: { $0.action == config.action }) {
+            configs[index] = config
+        } else {
+            configs.append(config)
+        }
+        shortcutConfigs = configs
+    }
+
+    func resetShortcutsToDefaults() {
+        shortcutConfigs = ShortcutAction.allCases.map { ShortcutConfig.defaultConfig(for: $0) }
+    }
+
+    // MARK: - Capture Mode Settings
+
+    @AppStorage("captureMode") var captureMode: CaptureMode = .display
+
+    @AppStorage("selectedWindowsData") private var selectedWindowsData: Data = Data()
+
+    var selectedWindows: [WindowSelection] {
+        get {
+            guard !selectedWindowsData.isEmpty,
+                  let windows = try? JSONDecoder().decode([WindowSelection].self, from: selectedWindowsData) else {
+                return []
+            }
+            return windows
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                selectedWindowsData = data
+                objectWillChange.send()
+            }
+        }
+    }
+
+    func updateWindowSelection(_ windows: [WindowSelection]) {
+        selectedWindows = windows
+    }
+
+    func clearWindowSelection() {
+        selectedWindows = []
+    }
+
+    /// Soft limit warning threshold for window count
+    let windowCountWarningThreshold: Int = 4
 
     // Save location as URL
     var saveLocation: URL {
